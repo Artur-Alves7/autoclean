@@ -14,16 +14,633 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      atendimento_lavadores: {
+        Row: {
+          atendimento_id: string
+          atribuido_em: string
+          id: string
+          lavador_perfil_id: string
+          ordem_rateio: number
+        }
+        Insert: {
+          atendimento_id: string
+          atribuido_em?: string
+          id?: string
+          lavador_perfil_id: string
+          ordem_rateio: number
+        }
+        Update: {
+          atendimento_id?: string
+          atribuido_em?: string
+          id?: string
+          lavador_perfil_id?: string
+          ordem_rateio?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "atendimento_lavadores_atendimento_id_fkey"
+            columns: ["atendimento_id"]
+            isOneToOne: false
+            referencedRelation: "atendimentos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "atendimento_lavadores_lavador_perfil_id_fkey"
+            columns: ["lavador_perfil_id"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      atendimentos: {
+        Row: {
+          atualizado_em: string
+          cancelado_em: string | null
+          categoria_veiculo_snapshot: string
+          chegou_em: string
+          cliente_id: string
+          criado_em: string
+          criado_por_perfil_id: string
+          entregue_em: string | null
+          id: string
+          lavagem_iniciada_em: string | null
+          motivo_cancelamento: string | null
+          nome_cliente_snapshot: string
+          observacoes: string | null
+          pronto_em: string | null
+          servico_id: string
+          servico_snapshot: string
+          status: Database["public"]["Enums"]["status_atendimento"]
+          valor_empresa_snapshot: number
+          valor_final: number | null
+          veiculo_id: string
+          veiculo_snapshot: string
+        }
+        Insert: {
+          atualizado_em?: string
+          cancelado_em?: string | null
+          categoria_veiculo_snapshot: string
+          chegou_em?: string
+          cliente_id: string
+          criado_em?: string
+          criado_por_perfil_id: string
+          entregue_em?: string | null
+          id?: string
+          lavagem_iniciada_em?: string | null
+          motivo_cancelamento?: string | null
+          nome_cliente_snapshot: string
+          observacoes?: string | null
+          pronto_em?: string | null
+          servico_id: string
+          servico_snapshot: string
+          status?: Database["public"]["Enums"]["status_atendimento"]
+          valor_empresa_snapshot: number
+          valor_final?: number | null
+          veiculo_id: string
+          veiculo_snapshot: string
+        }
+        Update: {
+          atualizado_em?: string
+          cancelado_em?: string | null
+          categoria_veiculo_snapshot?: string
+          chegou_em?: string
+          cliente_id?: string
+          criado_em?: string
+          criado_por_perfil_id?: string
+          entregue_em?: string | null
+          id?: string
+          lavagem_iniciada_em?: string | null
+          motivo_cancelamento?: string | null
+          nome_cliente_snapshot?: string
+          observacoes?: string | null
+          pronto_em?: string | null
+          servico_id?: string
+          servico_snapshot?: string
+          status?: Database["public"]["Enums"]["status_atendimento"]
+          valor_empresa_snapshot?: number
+          valor_final?: number | null
+          veiculo_id?: string
+          veiculo_snapshot?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "atendimentos_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "clientes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "atendimentos_criado_por_perfil_id_fkey"
+            columns: ["criado_por_perfil_id"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "atendimentos_servico_id_fkey"
+            columns: ["servico_id"]
+            isOneToOne: false
+            referencedRelation: "servicos_lavagem"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fk_atendimentos_veiculo_cliente"
+            columns: ["veiculo_id", "cliente_id"]
+            isOneToOne: false
+            referencedRelation: "veiculos"
+            referencedColumns: ["id", "cliente_id"]
+          },
+        ]
+      }
+      categorias_veiculo: {
+        Row: {
+          ativo: boolean
+          atualizado_em: string
+          criado_em: string
+          id: string
+          nome: string
+          valor_empresa: number
+        }
+        Insert: {
+          ativo?: boolean
+          atualizado_em?: string
+          criado_em?: string
+          id?: string
+          nome: string
+          valor_empresa: number
+        }
+        Update: {
+          ativo?: boolean
+          atualizado_em?: string
+          criado_em?: string
+          id?: string
+          nome?: string
+          valor_empresa?: number
+        }
+        Relationships: []
+      }
+      clientes: {
+        Row: {
+          ativo: boolean
+          atualizado_em: string
+          criado_em: string
+          id: string
+          nome_completo: string
+          observacoes: string | null
+          telefone: string
+        }
+        Insert: {
+          ativo?: boolean
+          atualizado_em?: string
+          criado_em?: string
+          id?: string
+          nome_completo: string
+          observacoes?: string | null
+          telefone: string
+        }
+        Update: {
+          ativo?: boolean
+          atualizado_em?: string
+          criado_em?: string
+          id?: string
+          nome_completo?: string
+          observacoes?: string | null
+          telefone?: string
+        }
+        Relationships: []
+      }
+      fechamentos_diarios: {
+        Row: {
+          confirmado_em: string | null
+          confirmado_por_perfil_id: string | null
+          criado_em: string
+          criado_por_perfil_id: string
+          data_operacao: string
+          id: string
+          observacoes: string | null
+          status: Database["public"]["Enums"]["status_fechamento"]
+        }
+        Insert: {
+          confirmado_em?: string | null
+          confirmado_por_perfil_id?: string | null
+          criado_em?: string
+          criado_por_perfil_id: string
+          data_operacao: string
+          id?: string
+          observacoes?: string | null
+          status?: Database["public"]["Enums"]["status_fechamento"]
+        }
+        Update: {
+          confirmado_em?: string | null
+          confirmado_por_perfil_id?: string | null
+          criado_em?: string
+          criado_por_perfil_id?: string
+          data_operacao?: string
+          id?: string
+          observacoes?: string | null
+          status?: Database["public"]["Enums"]["status_fechamento"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fechamentos_diarios_confirmado_por_perfil_id_fkey"
+            columns: ["confirmado_por_perfil_id"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fechamentos_diarios_criado_por_perfil_id_fkey"
+            columns: ["criado_por_perfil_id"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      historico_alteracoes: {
+        Row: {
+          alterado_em: string
+          alterado_por_perfil_id: string | null
+          atendimento_id: string
+          campo_alterado: string
+          id: string
+          motivo: string | null
+          valor_anterior: Json | null
+          valor_novo: Json | null
+        }
+        Insert: {
+          alterado_em?: string
+          alterado_por_perfil_id?: string | null
+          atendimento_id: string
+          campo_alterado: string
+          id?: string
+          motivo?: string | null
+          valor_anterior?: Json | null
+          valor_novo?: Json | null
+        }
+        Update: {
+          alterado_em?: string
+          alterado_por_perfil_id?: string | null
+          atendimento_id?: string
+          campo_alterado?: string
+          id?: string
+          motivo?: string | null
+          valor_anterior?: Json | null
+          valor_novo?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "historico_alteracoes_alterado_por_perfil_id_fkey"
+            columns: ["alterado_por_perfil_id"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "historico_alteracoes_atendimento_id_fkey"
+            columns: ["atendimento_id"]
+            isOneToOne: false
+            referencedRelation: "atendimentos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      historico_status: {
+        Row: {
+          alterado_em: string
+          alterado_por_perfil_id: string | null
+          atendimento_id: string
+          id: string
+          motivo: string | null
+          status_anterior:
+            | Database["public"]["Enums"]["status_atendimento"]
+            | null
+          status_novo: Database["public"]["Enums"]["status_atendimento"]
+        }
+        Insert: {
+          alterado_em?: string
+          alterado_por_perfil_id?: string | null
+          atendimento_id: string
+          id?: string
+          motivo?: string | null
+          status_anterior?:
+            | Database["public"]["Enums"]["status_atendimento"]
+            | null
+          status_novo: Database["public"]["Enums"]["status_atendimento"]
+        }
+        Update: {
+          alterado_em?: string
+          alterado_por_perfil_id?: string | null
+          atendimento_id?: string
+          id?: string
+          motivo?: string | null
+          status_anterior?:
+            | Database["public"]["Enums"]["status_atendimento"]
+            | null
+          status_novo?: Database["public"]["Enums"]["status_atendimento"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "historico_status_alterado_por_perfil_id_fkey"
+            columns: ["alterado_por_perfil_id"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "historico_status_atendimento_id_fkey"
+            columns: ["atendimento_id"]
+            isOneToOne: false
+            referencedRelation: "atendimentos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      itens_fechamento: {
+        Row: {
+          atendimento_id: string
+          criado_em: string
+          fechamento_diario_id: string
+          id: string
+          item_origem_id: string | null
+          perfil_destinatario_id: string | null
+          tipo_destinatario: Database["public"]["Enums"]["tipo_destinatario"]
+          tipo_lancamento: Database["public"]["Enums"]["tipo_lancamento"]
+          valor: number
+        }
+        Insert: {
+          atendimento_id: string
+          criado_em?: string
+          fechamento_diario_id: string
+          id?: string
+          item_origem_id?: string | null
+          perfil_destinatario_id?: string | null
+          tipo_destinatario: Database["public"]["Enums"]["tipo_destinatario"]
+          tipo_lancamento?: Database["public"]["Enums"]["tipo_lancamento"]
+          valor: number
+        }
+        Update: {
+          atendimento_id?: string
+          criado_em?: string
+          fechamento_diario_id?: string
+          id?: string
+          item_origem_id?: string | null
+          perfil_destinatario_id?: string | null
+          tipo_destinatario?: Database["public"]["Enums"]["tipo_destinatario"]
+          tipo_lancamento?: Database["public"]["Enums"]["tipo_lancamento"]
+          valor?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "itens_fechamento_atendimento_id_fkey"
+            columns: ["atendimento_id"]
+            isOneToOne: false
+            referencedRelation: "atendimentos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "itens_fechamento_fechamento_diario_id_fkey"
+            columns: ["fechamento_diario_id"]
+            isOneToOne: false
+            referencedRelation: "fechamentos_diarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "itens_fechamento_item_origem_id_fkey"
+            columns: ["item_origem_id"]
+            isOneToOne: false
+            referencedRelation: "itens_fechamento"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "itens_fechamento_perfil_destinatario_id_fkey"
+            columns: ["perfil_destinatario_id"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pagamentos: {
+        Row: {
+          atendimento_id: string
+          criado_em: string
+          forma_pagamento: Database["public"]["Enums"]["forma_pagamento"]
+          id: string
+          pago_em: string
+          recebido_por_perfil_id: string
+          valor: number
+        }
+        Insert: {
+          atendimento_id: string
+          criado_em?: string
+          forma_pagamento: Database["public"]["Enums"]["forma_pagamento"]
+          id?: string
+          pago_em?: string
+          recebido_por_perfil_id: string
+          valor: number
+        }
+        Update: {
+          atendimento_id?: string
+          criado_em?: string
+          forma_pagamento?: Database["public"]["Enums"]["forma_pagamento"]
+          id?: string
+          pago_em?: string
+          recebido_por_perfil_id?: string
+          valor?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pagamentos_atendimento_id_fkey"
+            columns: ["atendimento_id"]
+            isOneToOne: false
+            referencedRelation: "atendimentos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pagamentos_recebido_por_perfil_id_fkey"
+            columns: ["recebido_por_perfil_id"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      papeis_perfil: {
+        Row: {
+          atribuido_em: string
+          papel: Database["public"]["Enums"]["papel_usuario"]
+          perfil_id: string
+        }
+        Insert: {
+          atribuido_em?: string
+          papel: Database["public"]["Enums"]["papel_usuario"]
+          perfil_id: string
+        }
+        Update: {
+          atribuido_em?: string
+          papel?: Database["public"]["Enums"]["papel_usuario"]
+          perfil_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "papeis_perfil_perfil_id_fkey"
+            columns: ["perfil_id"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      perfis: {
+        Row: {
+          ativo: boolean
+          atualizado_em: string
+          criado_em: string
+          id: string
+          nome_completo: string
+          telefone: string | null
+          usuario_auth_id: string
+        }
+        Insert: {
+          ativo?: boolean
+          atualizado_em?: string
+          criado_em?: string
+          id?: string
+          nome_completo: string
+          telefone?: string | null
+          usuario_auth_id: string
+        }
+        Update: {
+          ativo?: boolean
+          atualizado_em?: string
+          criado_em?: string
+          id?: string
+          nome_completo?: string
+          telefone?: string | null
+          usuario_auth_id?: string
+        }
+        Relationships: []
+      }
+      servicos_lavagem: {
+        Row: {
+          ativo: boolean
+          atualizado_em: string
+          criado_em: string
+          descricao: string | null
+          id: string
+          nome: string
+        }
+        Insert: {
+          ativo?: boolean
+          atualizado_em?: string
+          criado_em?: string
+          descricao?: string | null
+          id?: string
+          nome: string
+        }
+        Update: {
+          ativo?: boolean
+          atualizado_em?: string
+          criado_em?: string
+          descricao?: string | null
+          id?: string
+          nome?: string
+        }
+        Relationships: []
+      }
+      veiculos: {
+        Row: {
+          ativo: boolean
+          atualizado_em: string
+          categoria_veiculo_id: string
+          cliente_id: string
+          cor: string | null
+          criado_em: string
+          id: string
+          marca: string
+          modelo: string
+          observacoes: string | null
+          placa: string | null
+          placa_normalizada: string | null
+        }
+        Insert: {
+          ativo?: boolean
+          atualizado_em?: string
+          categoria_veiculo_id: string
+          cliente_id: string
+          cor?: string | null
+          criado_em?: string
+          id?: string
+          marca: string
+          modelo: string
+          observacoes?: string | null
+          placa?: string | null
+          placa_normalizada?: string | null
+        }
+        Update: {
+          ativo?: boolean
+          atualizado_em?: string
+          categoria_veiculo_id?: string
+          cliente_id?: string
+          cor?: string | null
+          criado_em?: string
+          id?: string
+          marca?: string
+          modelo?: string
+          observacoes?: string | null
+          placa?: string | null
+          placa_normalizada?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "veiculos_categoria_veiculo_id_fkey"
+            columns: ["categoria_veiculo_id"]
+            isOneToOne: false
+            referencedRelation: "categorias_veiculo"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "veiculos_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "clientes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      perfil_atual_id: { Args: never; Returns: string }
+      perfil_tem_papel: {
+        Args: {
+          p_papel: Database["public"]["Enums"]["papel_usuario"]
+          p_perfil_id: string
+        }
+        Returns: boolean
+      }
+      usuario_tem_papel: {
+        Args: { p_papel: Database["public"]["Enums"]["papel_usuario"] }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      forma_pagamento: "dinheiro" | "pix" | "debito" | "credito" | "outro"
+      papel_usuario: "administrador" | "lavador"
+      status_atendimento:
+        | "aguardando"
+        | "em_lavagem"
+        | "pronto_para_retirada"
+        | "entregue"
+        | "cancelado"
+      status_fechamento: "rascunho" | "confirmado"
+      tipo_destinatario: "empresa" | "lavador"
+      tipo_lancamento: "repasse" | "ajuste"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +767,19 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      forma_pagamento: ["dinheiro", "pix", "debito", "credito", "outro"],
+      papel_usuario: ["administrador", "lavador"],
+      status_atendimento: [
+        "aguardando",
+        "em_lavagem",
+        "pronto_para_retirada",
+        "entregue",
+        "cancelado",
+      ],
+      status_fechamento: ["rascunho", "confirmado"],
+      tipo_destinatario: ["empresa", "lavador"],
+      tipo_lancamento: ["repasse", "ajuste"],
+    },
   },
 } as const
