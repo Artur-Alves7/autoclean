@@ -10,9 +10,9 @@ export const Route = createFileRoute("/_authenticated")({
       acesso = await carregarAcesso();
     } catch (e) {
       if (e instanceof AcessoNegado) await supabase.auth.signOut();
-      throw redirect({ to: "/", search: { msg: e instanceof Error ? e.message : undefined } });
+      throw redirect({ to: "/", search: e instanceof Error ? { msg: e.message } : {} });
     }
-    if (!acesso) throw redirect({ to: "/", search: { msg: undefined } });
+    if (!acesso) throw redirect({ to: "/" });
     return { acesso };
   },
   pendingComponent: () => (

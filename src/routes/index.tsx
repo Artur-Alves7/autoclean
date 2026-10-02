@@ -5,7 +5,8 @@ import { AcessoNegado, carregarAcesso, destinoDoPapel } from "@/lib/acesso";
 
 export const Route = createFileRoute("/")({
   ssr: false,
-  validateSearch: (s: Record<string, unknown>) => ({ msg: typeof s.msg === "string" ? s.msg : undefined }),
+  validateSearch: (s: Record<string, unknown>): { msg?: string } =>
+    typeof s["msg"] === "string" ? { msg: s["msg"] } : {},
   head: () => ({
     meta: [
       { title: "Entrar — LavaClean" },
