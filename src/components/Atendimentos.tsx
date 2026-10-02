@@ -12,10 +12,11 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { z } from "zod";
 
 import type { Papel } from "@/lib/acesso";
+import { montarParametrosNovoAtendimento, prepararBuscaCliente } from "@/lib/atendimento";
 import {
   proximoStatus,
   reaisParaCentavos,
@@ -287,6 +288,7 @@ function NovoAtendimento({ perfilId, onFechar }: { perfilId: string; onFechar: (
   const [valor, setValor] = useState("");
   const [observacoes, setObservacoes] = useState("");
   const [erro, setErro] = useState<string | null>(null);
+  const enviando = useRef(false);
   void perfilId;
 
   useEffect(() => {
@@ -297,8 +299,7 @@ function NovoAtendimento({ perfilId, onFechar }: { perfilId: string; onFechar: (
     queryKey: ["busca-clientes", buscaDeb],
     enabled: buscaDeb.length >= 2 && !cliente,
     queryFn: async () => {
-      const termo = buscaDeb.replace(/[%(),]/g, "");
-      const placa = termo.replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
+      const { termo, placa } = prepararBuscaCliente(buscaDeb);
       const [porCliente, porPlaca] = await Promise.all([
         db()
           .from("clientes")
@@ -380,31 +381,40 @@ function NovoAtendimento({ perfilId, onFechar }: { perfilId: string; onFechar: (
     mutationFn: async () => {
       const clienteNovo = cliente ? null : clienteSchema.parse(dadosCliente);
       const veiculoNovo = novoVeiculo || !veiculoId ? veiculoSchema.parse(veiculo) : null;
-      const valorFinal = valorDepois ? null : reaisParaCentavos(valor) / 100;
-      const { error } = await db().rpc("rpc_criar_atendimento", {
-        p_servico_id: servicoId,
-        p_lavadores: lavadores,
-        p_cliente_id: cliente?.id ?? null,
-        p_cliente: clienteNovo,
-        p_veiculo_id: veiculoNovo ? null : veiculoId,
-        p_veiculo: veiculoNovo,
-        p_valor_final: valorFinal,
-        p_observacoes: observacoes.trim() || null,
+      const parametros = montarParametrosNovoAtendimento({
+        servicoId,
+        lavadores,
+        clienteId: cliente?.id ?? null,
+        clienteNovo,
+        veiculoId: veiculoNovo ? null : veiculoId,
+        veiculoNovo,
+        valorDepois,
+        valor,
+        observacoes,
       });
+      const { error } = await db().rpc("rpc_criar_atendimento", parametros);
       if (error) throw error;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["fila-atendimentos"] });
       onFechar();
     },
-    onError: (e) => setErro(mensagemErro(e)),
+    onError: (e) =>
+      setErro(
+        e instanceof z.ZodError ? (e.issues[0]?.message ?? "Dados inválidos.") : mensagemErro(e),
+      ),
+    onSettled: () => {
+      enviando.current = false;
+    },
   });
   function enviar(e: FormEvent) {
     e.preventDefault();
+    if (enviando.current || salvar.isPending) return;
     setErro(null);
     if (!cliente && !novoCliente) return setErro("Selecione ou cadastre um cliente.");
     if (!servicoId) return setErro("Selecione o serviço.");
     if (!lavadores.length) return setErro("Selecione pelo menos um lavador.");
+    enviando.current = true;
     salvar.mutate();
   }
   const alternarLavador = (id: string) =>
@@ -563,7 +573,7 @@ function NovoAtendimento({ perfilId, onFechar }: { perfilId: string; onFechar: (
                     onChange={() => setVeiculoId(v.id)}
                   />
                   {v.marca} {v.modelo}
-                  {v.placa ? ` · ${v.placa}` : ""} ({v.categorias_veiculo?.nome})
+                  {v.placa ? ` · ${v.placa}` : " · Sem placa"} ({v.categorias_veiculo?.nome})
                 </label>
               ))}
               <Button
@@ -722,7 +732,12 @@ function NovoAtendimento({ perfilId, onFechar }: { perfilId: string; onFechar: (
           {erro}
         </p>
       )}
-      <Button disabled={salvar.isPending} aria-busy={salvar.isPending} className="w-full">
+      <Button
+        type="submit"
+        disabled={salvar.isPending}
+        aria-busy={salvar.isPending}
+        className="w-full"
+      >
         {salvar.isPending ? (
           <LoaderCircle className="animate-spin" aria-hidden="true" />
         ) : (

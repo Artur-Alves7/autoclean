@@ -47,10 +47,16 @@ function clienteDeTeste(fila = filaTeste) {
   return qc;
 }
 
-function renderFila(fila = filaTeste) {
+function renderFila(
+  fila = filaTeste,
+  papel: "administrador" | "lavador" = "lavador",
+  preparar?: (qc: QueryClient) => void,
+) {
+  const qc = clienteDeTeste(fila);
+  preparar?.(qc);
   return render(
-    <QueryClientProvider client={clienteDeTeste(fila)}>
-      <FilaAtendimentos perfilId="lavador-teste" papel="lavador" />
+    <QueryClientProvider client={qc}>
+      <FilaAtendimentos perfilId="lavador-teste" papel={papel} />
     </QueryClientProvider>,
   );
 }
@@ -123,7 +129,149 @@ describe("interface operacional", () => {
         }),
       ),
     );
+    expect(mocks.rpc.mock.calls[0]![1].p_veiculo).toMatchObject({ placa: null });
     expect(mocks.rpc.mock.calls[0]![1].p_veiculo).not.toHaveProperty("placa_normalizada");
+  });
+
+  it("reutiliza um entre múltiplos veículos e aceita valor informado", async () => {
+    renderFila([], "lavador", (qc) => {
+      qc.setQueryData(
+        ["busca-clientes", "Cliente existente"],
+        [{ id: "cliente-existente", nome_completo: "Cliente existente", telefone: "85988887777" }],
+      );
+      qc.setQueryData(
+        ["veiculos-cliente", "cliente-existente"],
+        [
+          {
+            id: "moto-sem-placa",
+            marca: "Honda",
+            modelo: "CG 160",
+            placa: null,
+            cor: "Vermelha",
+            categorias_veiculo: { nome: "Moto" },
+          },
+          {
+            id: "carro-com-placa",
+            marca: "Fiat",
+            modelo: "Argo",
+            placa: "ABC-1D23",
+            cor: "Prata",
+            categorias_veiculo: { nome: "Carro" },
+          },
+        ],
+      );
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Novo atendimento" }));
+    fireEvent.change(screen.getByLabelText("Buscar cliente por nome, telefone ou placa"), {
+      target: { value: "Cliente existente" },
+    });
+    fireEvent.click(await screen.findByRole("button", { name: /Cliente existente · 85988887777/ }));
+    expect(await screen.findByLabelText(/Honda CG 160 · Sem placa/)).toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText(/Fiat Argo · ABC-1D23/));
+    fireEvent.change(screen.getByLabelText("Serviço", { exact: true }), {
+      target: { value: "servico-teste" },
+    });
+    fireEvent.click(screen.getByLabelText("Lavador de teste", { exact: true }));
+    fireEvent.click(screen.getByLabelText("Informar valor depois"));
+    fireEvent.change(screen.getByLabelText("Valor final (R$)"), { target: { value: "89,90" } });
+    fireEvent.click(screen.getByRole("button", { name: "Registrar chegada" }));
+
+    await waitFor(() =>
+      expect(mocks.rpc).toHaveBeenCalledWith(
+        "rpc_criar_atendimento",
+        expect.objectContaining({
+          p_cliente_id: "cliente-existente",
+          p_cliente: null,
+          p_veiculo_id: "carro-com-placa",
+          p_veiculo: null,
+          p_valor_final: 89.9,
+        }),
+      ),
+    );
+  });
+
+  it("mostra a primeira mensagem de validação em linguagem simples", async () => {
+    renderFila([]);
+    fireEvent.click(screen.getByRole("button", { name: "Novo atendimento" }));
+    fireEvent.click(screen.getByRole("button", { name: /Cadastrar cliente/ }));
+    fireEvent.change(screen.getByLabelText("Serviço", { exact: true }), {
+      target: { value: "servico-teste" },
+    });
+    fireEvent.click(screen.getByLabelText("Lavador de teste", { exact: true }));
+    fireEvent.click(screen.getByRole("button", { name: "Registrar chegada" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Informe o nome do cliente.");
+    expect(screen.getByRole("alert")).not.toHaveTextContent("invalid_type");
+    expect(mocks.rpc).not.toHaveBeenCalled();
+  });
+
+  it("bloqueia dois envios rápidos do mesmo atendimento", async () => {
+    let concluir!: (resultado: { error: null }) => void;
+    mocks.rpc.mockReturnValueOnce(
+      new Promise<{ error: null }>((resolve) => {
+        concluir = resolve;
+      }),
+    );
+    renderFila([]);
+    fireEvent.click(screen.getByRole("button", { name: "Novo atendimento" }));
+    fireEvent.click(screen.getByRole("button", { name: /Cadastrar cliente/ }));
+    fireEvent.change(screen.getByLabelText("Nome", { exact: true }), {
+      target: { value: "Cliente de teste" },
+    });
+    fireEvent.change(screen.getByLabelText("Telefone"), { target: { value: "85999999999" } });
+    fireEvent.change(screen.getByLabelText("Categoria"), { target: { value: categoriaId } });
+    fireEvent.change(screen.getByLabelText("Marca", { exact: true }), {
+      target: { value: "Marca teste" },
+    });
+    fireEvent.change(screen.getByLabelText("Modelo", { exact: true }), {
+      target: { value: "Modelo teste" },
+    });
+    fireEvent.change(screen.getByLabelText("Serviço", { exact: true }), {
+      target: { value: "servico-teste" },
+    });
+    fireEvent.click(screen.getByLabelText("Lavador de teste", { exact: true }));
+    const formulario = screen.getByRole("form", { name: "Registrar chegada" });
+    fireEvent.submit(formulario);
+    fireEvent.submit(formulario);
+
+    await waitFor(() => expect(mocks.rpc).toHaveBeenCalledTimes(1));
+    concluir({ error: null });
+  });
+
+  it("exige motivo suficiente antes de cancelar", async () => {
+    renderFila();
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+    fireEvent.change(screen.getByLabelText("Motivo"), { target: { value: "x" } });
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("motivo do cancelamento");
+    expect(mocks.rpc).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByLabelText("Motivo"), {
+      target: { value: "Cliente desistiu do serviço" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
+    await waitFor(() =>
+      expect(mocks.rpc).toHaveBeenCalledWith(
+        "rpc_avancar_atendimento",
+        expect.objectContaining({
+          p_novo_status: "cancelado",
+          p_motivo: "Cliente desistiu do serviço",
+        }),
+      ),
+    );
+  });
+
+  it.each([
+    ["lavador", false],
+    ["administrador", true],
+  ] as const)("respeita a correção de participantes para %s", (papel, podeCorrigir) => {
+    renderFila([{ ...filaTeste[0]!, lavadores: [] }], papel);
+    expect(screen.getByRole("button", { name: "Novo atendimento" })).toBeInTheDocument();
+    if (podeCorrigir) {
+      expect(screen.getByRole("button", { name: "Corrigir lavadores" })).toBeInTheDocument();
+    } else {
+      expect(screen.queryByRole("button", { name: "Corrigir lavadores" })).not.toBeInTheDocument();
+    }
   });
 
   it("abre diálogo de entrega com campos rotulados e restaura foco ao fechar", async () => {
