@@ -253,9 +253,26 @@ describe("contrato HTTP da função de convite (Supabase simulado)", () => {
     await conferir(await m.handler(requisicao()), 500);
   });
 
-  it("mantém o projeto e a verificação JWT na configuração central", () => {
-    const config = readFileSync("supabase/config.toml", "utf8");
-    expect(config).toMatch(/^project_id = "jkhfhyrwkwzpoteenkyh"/);
-    expect(config).toMatch(/\[functions\.convidar-usuario\]\s+verify_jwt = true/);
+  it("mantém o projeto e a verificação JWT nas configurações da função", () => {
+    const configCentral = readFileSync("supabase/config.toml", "utf8");
+    const configLocal = readFileSync("supabase/functions/convidar-usuario/config.toml", "utf8");
+    expect(configCentral).toMatch(/^project_id = "jkhfhyrwkwzpoteenkyh"/);
+    expect(configCentral).toMatch(/\[functions\.convidar-usuario\]\s+verify_jwt = true/);
+    expect(configLocal).toMatch(/^verify_jwt = true\s*$/);
+  });
+
+  it("mantém a chave administrativa somente no código de servidor", () => {
+    const handler = readFileSync("supabase/functions/convidar-usuario/handler.ts", "utf8");
+    const interfaceUsuarios = readFileSync("src/components/Usuarios.tsx", "utf8");
+    const clientePublico = readFileSync("src/integrations/supabase/client.ts", "utf8");
+    const nomesNoEnv = readFileSync(".env", "utf8")
+      .split(/\r?\n/)
+      .map((linha) => linha.split("=", 1)[0]?.trim())
+      .filter(Boolean);
+
+    expect(handler).toContain('getEnv("SUPABASE_SERVICE_ROLE_KEY")');
+    expect(interfaceUsuarios).not.toMatch(/SUPABASE_SERVICE_ROLE_KEY|service_role/i);
+    expect(clientePublico).not.toMatch(/SUPABASE_SERVICE_ROLE_KEY|service_role/i);
+    expect(nomesNoEnv).not.toContain("SUPABASE_SERVICE_ROLE_KEY");
   });
 });
