@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState, type FormEvent } from "react";
 import { z } from "zod";
 import { supabase } from "@/integrations/supabase/client";
+import { montarPayloadNovoVeiculo } from "@/lib/veiculo";
 
 // Untyped view: generated types don't list these tables yet.
 const db = () => supabase as unknown as SupabaseClient;
@@ -206,16 +207,11 @@ function NovoAtendimento({ perfilId, onFechar }: { perfilId: string; onFechar: (
       if (novoVeiculo || !vId) {
         const r = veiculoSchema.safeParse(nv);
         if (!r.success) throw new Error(r.error.issues[0]!.message);
-        const placa = r.data.placa ? r.data.placa.toUpperCase() : null;
-        const { data, error } = await db().from("veiculos").insert({
-          cliente_id: clienteId,
-          categoria_veiculo_id: r.data.categoria_veiculo_id,
-          marca: r.data.marca,
-          modelo: r.data.modelo,
-          placa,
-          placa_normalizada: placa ? placa.replace(/[^A-Z0-9]/g, "") : null,
-          cor: r.data.cor || null,
-        }).select("id").single();
+        const { data, error } = await db()
+          .from("veiculos")
+          .insert(montarPayloadNovoVeiculo(clienteId, r.data))
+          .select("id")
+          .single();
         if (error) throw error;
         vId = data.id as string;
       }
