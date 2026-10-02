@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { CarFront, Settings2, UsersRound, Wallet, LayoutDashboard } from "lucide-react";
 
 import { AreaLayout } from "@/components/AreaLayout";
 import { FilaAtendimentos } from "@/components/Atendimentos";
@@ -16,6 +17,13 @@ const ROTULOS: Record<Aba, string> = {
   fechamentos: "Repasses",
   configuracoes: "Configurações",
   usuarios: "Usuários",
+};
+const ICONES = {
+  atendimentos: LayoutDashboard,
+  clientes: CarFront,
+  fechamentos: Wallet,
+  configuracoes: Settings2,
+  usuarios: UsersRound,
 };
 
 export function PainelSistema({
@@ -37,24 +45,32 @@ export function PainelSistema({
     <AreaLayout
       titulo={papel === "administrador" ? "Área administrativa" : "Área do lavador"}
       nome={nome}
+      secao={ROTULOS[aba]}
+      navigation={
+        <nav className="space-y-1" aria-label="Seções do sistema">
+          {abas.map((item) => {
+            const Icone = ICONES[item];
+            return (
+              <button
+                key={item}
+                type="button"
+                aria-current={aba === item ? "page" : undefined}
+                onClick={(evento) => {
+                  setAba(item);
+                  const menu = evento.currentTarget.closest("details");
+                  if (menu) menu.open = false;
+                  document.getElementById("conteudo-principal")?.focus();
+                }}
+                className="lc-nav-item"
+              >
+                <Icone aria-hidden="true" />
+                {ROTULOS[item]}
+              </button>
+            );
+          })}
+        </nav>
+      }
     >
-      <nav className="mb-5 flex gap-2 overflow-x-auto pb-1" aria-label="Seções do sistema">
-        {abas.map((item) => (
-          <button
-            key={item}
-            type="button"
-            onClick={() => setAba(item)}
-            className={`whitespace-nowrap rounded-md px-3 py-2 text-sm font-medium ${
-              aba === item
-                ? "bg-primary text-primary-foreground"
-                : "border bg-card text-foreground hover:bg-accent"
-            }`}
-          >
-            {ROTULOS[item]}
-          </button>
-        ))}
-      </nav>
-
       {aba === "atendimentos" && <FilaAtendimentos perfilId={perfilId} papel={papel} />}
       {aba === "clientes" && <ClientesVeiculos papel={papel} />}
       {aba === "fechamentos" && <Fechamentos perfilId={perfilId} papel={papel} />}

@@ -1,3 +1,5 @@
+import { Button } from "@/components/ui/button";
+import { CheckCheck, LoaderCircle, Wallet } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 
@@ -14,6 +16,13 @@ type AtendimentoFechamento = {
   valor_empresa_snapshot: number;
   total_pago: number;
   lavadores: { perfil_id: string; nome: string; ordem_rateio: number }[];
+};
+
+type Repasse = {
+  id: string;
+  valor: number;
+  atendimentos: { nome_cliente_snapshot: string; veiculo_snapshot: string } | null;
+  fechamentos_diarios: { data_operacao: string; status: string } | null;
 };
 
 export function Fechamentos({ perfilId, papel }: { perfilId: string; papel: Papel }) {
@@ -56,7 +65,8 @@ export function Fechamentos({ perfilId, papel }: { perfilId: string; papel: Pape
         .eq("perfil_destinatario_id", perfilId)
         .order("criado_em", { ascending: false });
       if (error) throw error;
-      return linhas ?? [];
+      // O cliente genérico não infere as relações muitos-para-um desta consulta.
+      return (linhas ?? []) as unknown as Repasse[];
     },
   });
 
@@ -137,12 +147,33 @@ export function Fechamentos({ perfilId, papel }: { perfilId: string; papel: Pape
 
   if (papel === "lavador") {
     return (
-      <section className="space-y-4">
-        <h1 className="text-xl font-semibold">Meus repasses</h1>
-        {meusRepasses.isLoading && <p>Carregando...</p>}
+      <section className="lc-page">
+        <div className="lc-page-heading">
+          <div>
+            <span className="lc-eyebrow">Financeiro</span>
+            <h1 className="mt-2">Meus repasses</h1>
+            <p>Acompanhe os valores registrados para você.</p>
+          </div>
+        </div>
+        {meusRepasses.isLoading && (
+          <p role="status" className="text-sm text-muted-foreground">
+            Carregando repasses...
+          </p>
+        )}
+        {meusRepasses.error && (
+          <p role="alert" className="lc-message">
+            {mensagemErro(meusRepasses.error)}
+          </p>
+        )}
+        {meusRepasses.data?.length === 0 && (
+          <div className="lc-empty">
+            <Wallet aria-hidden="true" />
+            Nenhum repasse registrado.
+          </div>
+        )}
         <ul className="space-y-2">
           {meusRepasses.data?.map((item) => (
-            <li key={item.id} className="rounded-lg border bg-card p-3 text-sm">
+            <li key={item.id} className="lc-panel text-sm">
               <strong>{formatarDinheiro(item.valor)}</strong> ·{" "}
               {item.atendimentos?.veiculo_snapshot ?? "Atendimento"}
               <span className="ml-2 text-muted-foreground">
@@ -156,31 +187,51 @@ export function Fechamentos({ perfilId, papel }: { perfilId: string; papel: Pape
   }
 
   return (
-    <section className="space-y-4">
-      <div className="flex flex-wrap items-end justify-between gap-3">
+    <section className="lc-page">
+      <div className="lc-page-heading">
         <div>
-          <h1 className="text-xl font-semibold">Fechamento diário</h1>
+          <span className="lc-eyebrow">Financeiro</span>
+          <h1 className="text-2xl font-bold tracking-tight">Fechamento diário</h1>
           <p className="text-sm text-muted-foreground">
             Atendimentos pendentes ficam explicitamente para outro fechamento.
           </p>
         </div>
-        <label className="text-sm">
-          Data
+        <label className="lc-label w-full sm:w-auto">
+          Data do fechamento
           <input
             type="date"
-            className="ml-2 rounded-md border px-3 py-2"
+            className="lc-field"
             value={data}
             onChange={(e) => setData(e.target.value)}
           />
         </label>
       </div>
+      {atendimentos.isLoading && (
+        <p role="status" className="text-sm text-muted-foreground">
+          Carregando atendimentos do dia...
+        </p>
+      )}
+      {atendimentos.error && (
+        <p role="alert" className="lc-message">
+          {mensagemErro(atendimentos.error)}
+        </p>
+      )}
       <div className="grid gap-3 sm:grid-cols-3">
-        <Resumo rotulo="Total recebido" valor={formatarDinheiro(resumo.total)} />
-        <Resumo rotulo="Parte da empresa" valor={formatarDinheiro(resumo.empresa)} />
-        <Resumo rotulo="Pendências impeditivas" valor={String(resumo.inconsistentes)} />
+        <Resumo
+          rotulo="Total recebido"
+          valor={atendimentos.data ? formatarDinheiro(resumo.total) : "—"}
+        />
+        <Resumo
+          rotulo="Parte da empresa"
+          valor={atendimentos.data ? formatarDinheiro(resumo.empresa) : "—"}
+        />
+        <Resumo
+          rotulo="Pendências impeditivas"
+          valor={atendimentos.data ? String(resumo.inconsistentes) : "—"}
+        />
       </div>
       {!!resumo.porLavador.length && (
-        <div className="rounded-lg border bg-card p-4">
+        <div className="lc-panel">
           <h2 className="mb-2 font-medium">Valores por lavador</h2>
           <ul className="grid gap-1 text-sm sm:grid-cols-2">
             {resumo.porLavador.map((item) => (
@@ -192,17 +243,31 @@ export function Fechamentos({ perfilId, papel }: { perfilId: string; papel: Pape
           </ul>
         </div>
       )}
-      <ul className="space-y-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="font-semibold">Revisão dos atendimentos</h2>
+        <p className="text-xs text-muted-foreground">
+          Marque os que ficarão para outro fechamento.
+        </p>
+      </div>
+      {atendimentos.data?.length === 0 && (
+        <div className="lc-empty">
+          <Wallet aria-hidden="true" />
+          Nenhum atendimento entregue nesta data.
+        </div>
+      )}
+      <ul className="space-y-3">
         {atendimentos.data?.map((item) => {
           const inconsistente =
             Number(item.total_pago) !== Number(item.valor_final) ||
             item.lavadores.length === 0 ||
             Number(item.valor_empresa_snapshot) > Number(item.valor_final);
           return (
-            <li key={item.id} className="rounded-lg border bg-card p-3 text-sm">
-              <div className="flex gap-3">
+            <li key={item.id} className="lc-panel text-sm">
+              <div className="flex flex-wrap items-start gap-3">
                 <input
                   type="checkbox"
+                  aria-label={`Deixar atendimento de ${item.nome_cliente_snapshot} para outro fechamento`}
+                  className="mt-1"
                   checked={pendentes.includes(item.id)}
                   onChange={() =>
                     setPendentes((lista) =>
@@ -212,7 +277,7 @@ export function Fechamentos({ perfilId, papel }: { perfilId: string; papel: Pape
                     )
                   }
                 />
-                <span>
+                <span className="min-w-0 flex-1">
                   <strong>{item.nome_cliente_snapshot}</strong> · {item.veiculo_snapshot} ·{" "}
                   {formatarDinheiro(item.valor_final)}
                   <br />
@@ -222,27 +287,35 @@ export function Fechamentos({ perfilId, papel }: { perfilId: string; papel: Pape
                     {inconsistente ? " · Corrigir antes de fechar" : ""}
                   </span>
                 </span>
-                <button
+                <Button
+                  variant="outline"
                   type="button"
                   className="ml-auto self-start text-primary hover:underline"
+                  disabled={corrigir.isPending}
                   onClick={() => corrigir.mutate(item)}
                 >
                   Corrigir
-                </button>
+                </Button>
               </div>
             </li>
           );
         })}
       </ul>
-      <button
+      <Button
         disabled={fechar.isPending || !atendimentos.data?.length}
+        aria-busy={fechar.isPending}
         onClick={() => fechar.mutate()}
-        className="rounded-md bg-primary px-4 py-2 text-primary-foreground disabled:opacity-50"
+        className="w-full sm:w-fit"
       >
+        {fechar.isPending ? (
+          <LoaderCircle className="animate-spin" aria-hidden="true" />
+        ) : (
+          <CheckCheck aria-hidden="true" />
+        )}
         {fechar.isPending ? "Confirmando..." : "Confirmar fechamento"}
-      </button>
+      </Button>
       {mensagem && (
-        <p role="status" className="text-sm">
+        <p role="status" className="lc-message">
           {mensagem}
         </p>
       )}
@@ -252,9 +325,9 @@ export function Fechamentos({ perfilId, papel }: { perfilId: string; papel: Pape
 
 function Resumo({ rotulo, valor }: { rotulo: string; valor: string }) {
   return (
-    <div className="rounded-lg border bg-card p-4">
+    <div className="lc-panel">
       <p className="text-sm text-muted-foreground">{rotulo}</p>
-      <p className="text-lg font-semibold">{valor}</p>
+      <p className="mt-2 text-2xl font-bold tracking-tight tabular-nums">{valor}</p>
     </div>
   );
 }

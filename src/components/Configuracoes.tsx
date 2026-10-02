@@ -1,3 +1,5 @@
+import { Button } from "@/components/ui/button";
+import { CarFront, Droplets, Plus } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
 
@@ -58,44 +60,81 @@ export function Configuracoes() {
   }
 
   return (
-    <section className="space-y-5">
-      <div>
-        <h1 className="text-xl font-semibold">Configurações</h1>
-        <p className="text-sm text-muted-foreground">
-          Alterações não modificam snapshots de atendimentos antigos.
-        </p>
+    <section className="lc-page">
+      <div className="lc-page-heading">
+        <div>
+          <span className="lc-eyebrow">Administração</span>
+          <h1 className="text-2xl font-bold tracking-tight">Configurações</h1>
+          <p className="text-sm text-muted-foreground">
+            Gerencie categorias e serviços. Os valores dos atendimentos anteriores são preservados.
+          </p>
+        </div>
       </div>
-      {erro && <p className="text-sm text-destructive">{erro}</p>}
+      {erro && (
+        <p role="alert" className="lc-message">
+          {erro}
+        </p>
+      )}
+      {dados.isLoading && (
+        <p role="status" className="text-sm text-muted-foreground">
+          Carregando configurações...
+        </p>
+      )}
+      {dados.error && (
+        <p role="alert" className="lc-message">
+          {mensagemErro(dados.error)}
+        </p>
+      )}
       <div className="grid gap-5 lg:grid-cols-2">
-        <div className="rounded-lg border bg-card p-4">
-          <h2 className="mb-3 font-semibold">Categorias de veículo</h2>
-          <form className="mb-4 grid gap-2 sm:grid-cols-[1fr_140px_auto]" onSubmit={criarCategoria}>
-            <input
-              className="rounded-md border px-3 py-2"
-              placeholder="Nome"
-              value={categoria.nome}
-              onChange={(e) => setCategoria({ ...categoria, nome: e.target.value })}
-            />
-            <input
-              className="rounded-md border px-3 py-2"
-              placeholder="Parte da empresa"
-              inputMode="decimal"
-              value={categoria.valor_empresa}
-              onChange={(e) => setCategoria({ ...categoria, valor_empresa: e.target.value })}
-            />
-            <button className="rounded-md bg-primary px-3 py-2 text-primary-foreground">
-              Adicionar
-            </button>
+        <div className="lc-panel">
+          <h2 className="mb-5 flex items-center gap-2 font-semibold">
+            <CarFront className="size-5 text-primary" aria-hidden="true" />
+            Categorias de veículo
+          </h2>
+          <form className="mb-5 grid gap-4 rounded-xl bg-muted/50 p-4" onSubmit={criarCategoria}>
+            <label className="lc-label">
+              Nome da categoria
+              <input
+                className="lc-field"
+                placeholder="Nome"
+                value={categoria.nome}
+                onChange={(e) => setCategoria({ ...categoria, nome: e.target.value })}
+              />
+            </label>
+            <label className="lc-label">
+              Parte da empresa (R$)
+              <input
+                className="lc-field"
+                placeholder="Parte da empresa"
+                inputMode="decimal"
+                value={categoria.valor_empresa}
+                onChange={(e) => setCategoria({ ...categoria, valor_empresa: e.target.value })}
+              />
+            </label>
+            <Button
+              disabled={salvar.isPending}
+              aria-busy={salvar.isPending}
+              className="justify-self-start"
+            >
+              <Plus aria-hidden="true" />
+              {salvar.isPending ? "Salvando..." : "Adicionar categoria"}
+            </Button>
           </form>
           <ul className="divide-y">
             {dados.data?.categorias.map((item) => (
-              <li key={item.id} className="flex items-center justify-between gap-2 py-2 text-sm">
+              <li
+                key={item.id}
+                className="flex flex-wrap items-center justify-between gap-3 py-4 text-sm"
+              >
                 <span>
                   {item.nome} · {formatarDinheiro(item.valor_empresa)} {!item.ativo && "· Inativa"}
                 </span>
-                <span className="flex gap-2">
-                  <button
-                    className="text-primary hover:underline"
+                <span className="flex flex-wrap gap-2">
+                  <Button
+                    variant="outline"
+                    className="text-primary"
+                    size="sm"
+                    disabled={salvar.isPending}
                     onClick={() => {
                       const nome = window.prompt("Nome da categoria", item.nome);
                       if (nome === null) return;
@@ -116,9 +155,12 @@ export function Configuracoes() {
                     }}
                   >
                     Editar
-                  </button>
-                  <button
-                    className="text-primary hover:underline"
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="text-primary"
+                    size="sm"
+                    disabled={salvar.isPending}
                     onClick={() =>
                       salvar.mutate(() =>
                         db()
@@ -129,40 +171,63 @@ export function Configuracoes() {
                     }
                   >
                     {item.ativo ? "Desativar" : "Ativar"}
-                  </button>
+                  </Button>
                 </span>
               </li>
             ))}
           </ul>
+          {dados.data?.categorias.length === 0 && (
+            <p className="lc-empty">Nenhuma categoria cadastrada.</p>
+          )}
         </div>
-        <div className="rounded-lg border bg-card p-4">
-          <h2 className="mb-3 font-semibold">Serviços</h2>
-          <form className="mb-4 space-y-2" onSubmit={criarServico}>
-            <input
-              className="w-full rounded-md border px-3 py-2"
-              placeholder="Nome"
-              value={servico.nome}
-              onChange={(e) => setServico({ ...servico, nome: e.target.value })}
-            />
-            <input
-              className="w-full rounded-md border px-3 py-2"
-              placeholder="Descrição opcional"
-              value={servico.descricao}
-              onChange={(e) => setServico({ ...servico, descricao: e.target.value })}
-            />
-            <button className="rounded-md bg-primary px-3 py-2 text-primary-foreground">
-              Adicionar
-            </button>
+        <div className="lc-panel">
+          <h2 className="mb-5 flex items-center gap-2 font-semibold">
+            <Droplets className="size-5 text-primary" aria-hidden="true" />
+            Serviços
+          </h2>
+          <form className="mb-5 grid gap-4 rounded-xl bg-muted/50 p-4" onSubmit={criarServico}>
+            <label className="lc-label">
+              Nome do serviço
+              <input
+                className="lc-field"
+                placeholder="Nome"
+                value={servico.nome}
+                onChange={(e) => setServico({ ...servico, nome: e.target.value })}
+              />
+            </label>
+            <label className="lc-label">
+              Descrição <span className="font-normal text-muted-foreground">(opcional)</span>
+              <input
+                className="lc-field"
+                placeholder="Descrição opcional"
+                value={servico.descricao}
+                onChange={(e) => setServico({ ...servico, descricao: e.target.value })}
+              />
+            </label>
+            <Button
+              disabled={salvar.isPending}
+              aria-busy={salvar.isPending}
+              className="justify-self-start"
+            >
+              <Plus aria-hidden="true" />
+              {salvar.isPending ? "Salvando..." : "Adicionar serviço"}
+            </Button>
           </form>
           <ul className="divide-y">
             {dados.data?.servicos.map((item) => (
-              <li key={item.id} className="flex items-center justify-between gap-2 py-2 text-sm">
+              <li
+                key={item.id}
+                className="flex flex-wrap items-center justify-between gap-3 py-4 text-sm"
+              >
                 <span>
                   {item.nome} {!item.ativo && "· Inativo"}
                 </span>
-                <span className="flex gap-2">
-                  <button
-                    className="text-primary hover:underline"
+                <span className="flex flex-wrap gap-2">
+                  <Button
+                    variant="outline"
+                    className="text-primary"
+                    size="sm"
+                    disabled={salvar.isPending}
                     onClick={() => {
                       const nome = window.prompt("Nome do serviço", item.nome);
                       if (nome === null) return;
@@ -178,9 +243,12 @@ export function Configuracoes() {
                     }}
                   >
                     Editar
-                  </button>
-                  <button
-                    className="text-primary hover:underline"
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="text-primary"
+                    size="sm"
+                    disabled={salvar.isPending}
                     onClick={() =>
                       salvar.mutate(() =>
                         db()
@@ -191,11 +259,14 @@ export function Configuracoes() {
                     }
                   >
                     {item.ativo ? "Desativar" : "Ativar"}
-                  </button>
+                  </Button>
                 </span>
               </li>
             ))}
           </ul>
+          {dados.data?.servicos.length === 0 && (
+            <p className="lc-empty">Nenhum serviço cadastrado.</p>
+          )}
         </div>
       </div>
     </section>

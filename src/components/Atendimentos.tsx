@@ -1,3 +1,16 @@
+import {
+  ArrowRight,
+  CarFront,
+  CheckCheck,
+  Clock3,
+  Droplets,
+  LoaderCircle,
+  Plus,
+  UsersRound,
+} from "lucide-react";
+import { StatusBadge } from "@/components/StatusBadge";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState, type FormEvent } from "react";
 import { z } from "zod";
@@ -25,8 +38,8 @@ const ACAO: Partial<Record<StatusAtendimento, string>> = {
   em_lavagem: "Marcar como pronto",
   pronto_para_retirada: "Registrar entrega",
 };
-const campo = "w-full rounded-md border border-input bg-background px-3 py-2 text-sm";
-const rotulo = "block space-y-1 text-sm font-medium";
+const campo = "lc-field";
+const rotulo = "lc-label";
 
 type Lavador = { perfil_id: string; nome: string; ordem_rateio: number };
 type ItemFila = {
@@ -76,84 +89,150 @@ export function FilaAtendimentos({ perfilId, papel }: { perfilId: string; papel:
   const atualizar = () => qc.invalidateQueries({ queryKey: ["fila-atendimentos"] });
 
   return (
-    <section className="space-y-4">
-      <div className="flex items-center justify-between gap-3">
-        <h1 className="text-xl font-semibold">Fila de atendimentos</h1>
+    <section className="lc-page">
+      <div className="lc-page-heading">
+        <div>
+          <span className="lc-eyebrow">Operação</span>
+          <h1 className="mt-2">Fila de atendimentos</h1>
+          <p>Da chegada à entrega, acompanhe cada etapa.</p>
+        </div>
         {!abrirForm && (
-          <button
-            className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
-            onClick={() => setAbrirForm(true)}
-          >
+          <Button className="w-full sm:w-auto" onClick={() => setAbrirForm(true)}>
+            <Plus aria-hidden="true" />
             Novo atendimento
-          </button>
+          </Button>
         )}
       </div>
       {abrirForm && <NovoAtendimento perfilId={perfilId} onFechar={() => setAbrirForm(false)} />}
-      {fila.isLoading && <p className="text-muted-foreground">Carregando fila...</p>}
-      {fila.error && <p className="text-destructive">{mensagemErro(fila.error)}</p>}
-      {fila.data?.length === 0 && (
-        <div className="rounded-xl border bg-card p-6 text-center text-muted-foreground">
-          Nenhum atendimento ativo.
-        </div>
-      )}
-      <ul className="space-y-3">
-        {fila.data?.map((item, indice) => (
-          <li key={item.id} className="rounded-xl border bg-card p-4">
-            <div className="flex flex-wrap items-start justify-between gap-2">
-              <div>
-                <p className="font-semibold">
-                  {indice + 1}. {item.nome_cliente_snapshot}
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  {item.veiculo_snapshot} · {item.categoria_veiculo_snapshot}
-                </p>
-              </div>
-              <span className="rounded-full bg-secondary px-3 py-1 text-xs font-medium">
-                {ROTULOS[item.status]}
-              </span>
+      <div className="grid grid-cols-3 gap-2 sm:gap-3" aria-label="Resumo da fila">
+        {[
+          { status: "aguardando", nome: "Aguardando", icone: Clock3 },
+          { status: "em_lavagem", nome: "Em lavagem", icone: Droplets },
+          { status: "pronto_para_retirada", nome: "Prontos para retirada", icone: CheckCheck },
+        ].map(({ status, nome, icone: Icone }) => (
+          <div key={status} className="lc-stat !gap-2 !p-3 sm:!gap-3 sm:!p-4">
+            <span
+              className="lc-status !hidden !rounded-xl !p-3 sm:!inline-flex"
+              data-status={status}
+            >
+              <Icone className="!size-5" aria-hidden="true" />
+            </span>
+            <div>
+              <strong>
+                {fila.data ? fila.data.filter((item) => item.status === status).length : "—"}
+              </strong>
+              <p>{nome}</p>
             </div>
-            <div className="mt-2 grid gap-1 text-sm sm:grid-cols-2">
-              <p>
-                <span className="text-muted-foreground">Serviço:</span> {item.servico_snapshot}
-              </p>
-              <p>
-                <span className="text-muted-foreground">Chegada:</span>{" "}
-                {formatarDataHora(item.chegou_em)}
-              </p>
-              <p>
-                <span className="text-muted-foreground">Valor:</span>{" "}
-                {item.valor_final == null ? "Informar depois" : formatarDinheiro(item.valor_final)}
-              </p>
-              <p>
-                <span className="text-muted-foreground">Lavadores:</span>{" "}
-                {item.lavadores.map((l) => l.nome).join(", ") || "Não vinculados"}
-              </p>
-            </div>
-            <div className="mt-3 flex flex-wrap gap-3 text-sm">
-              <button
-                className="font-medium text-primary hover:underline"
-                onClick={() => setAcao({ item, tipo: "avancar" })}
-              >
-                {ACAO[item.status]}
-              </button>
-              <button
-                className="text-destructive hover:underline"
-                onClick={() => setAcao({ item, tipo: "cancelar" })}
-              >
-                Cancelar
-              </button>
-              {papel === "administrador" && item.lavadores.length === 0 && (
-                <button
-                  className="text-primary hover:underline"
-                  onClick={() => setAcao({ item, tipo: "participantes" })}
-                >
-                  Corrigir lavadores
-                </button>
-              )}
-            </div>
-          </li>
+          </div>
         ))}
-      </ul>
+      </div>
+      <div className="lc-panel !p-0">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b px-5 py-4">
+          <h2 className="text-sm font-semibold">Atendimentos ativos</h2>
+          <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Clock3 className="size-3.5" aria-hidden="true" />
+            Ordem de chegada
+          </span>
+        </div>
+        {fila.isLoading && (
+          <p
+            role="status"
+            className="flex items-center justify-center gap-2 p-10 text-sm text-muted-foreground"
+          >
+            <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
+            Carregando fila...
+          </p>
+        )}
+        {fila.error && (
+          <p role="alert" className="lc-message m-4">
+            {mensagemErro(fila.error)}
+          </p>
+        )}
+        {fila.data?.length === 0 && (
+          <div className="lc-empty m-5">
+            <CarFront aria-hidden="true" />
+            <p className="font-semibold text-foreground">Nenhum atendimento ativo.</p>
+            <p className="mt-1">Use “Novo atendimento” para registrar a próxima chegada.</p>
+          </div>
+        )}
+        <ul className="divide-y">
+          {fila.data?.map((item, indice) => (
+            <li key={item.id} className="p-4 sm:p-5">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="flex min-w-0 gap-3">
+                  <span className="flex size-10 shrink-0 items-center justify-center rounded-xl border bg-muted text-xs font-semibold tabular-nums text-muted-foreground">
+                    {String(indice + 1).padStart(2, "0")}
+                  </span>
+                  <div className="min-w-0">
+                    <h3 className="font-semibold">{item.nome_cliente_snapshot}</h3>
+                    <p className="mt-0.5 text-sm text-muted-foreground">
+                      {item.veiculo_snapshot} · {item.categoria_veiculo_snapshot}
+                    </p>
+                  </div>
+                </div>
+                <StatusBadge status={item.status} />
+              </div>
+              <dl className="my-5 grid grid-cols-2 gap-x-4 gap-y-4 text-sm xl:grid-cols-4">
+                <div>
+                  <dt className="mb-1 text-xs text-muted-foreground">Serviço</dt>
+                  <dd className="font-medium">{item.servico_snapshot}</dd>
+                </div>
+                <div>
+                  <dt className="mb-1 text-xs text-muted-foreground">Chegada</dt>
+                  <dd className="font-medium">{formatarDataHora(item.chegou_em)}</dd>
+                </div>
+                <div>
+                  <dt className="mb-1 text-xs text-muted-foreground">Valor</dt>
+                  <dd className="font-semibold tabular-nums">
+                    {item.valor_final == null ? (
+                      <span className="text-[var(--status-wait-fg)]">Valor pendente</span>
+                    ) : (
+                      formatarDinheiro(item.valor_final)
+                    )}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="mb-1 flex items-center gap-1 text-xs text-muted-foreground">
+                    <UsersRound className="size-3" aria-hidden="true" />
+                    Lavadores
+                  </dt>
+                  <dd className="font-medium">
+                    {item.lavadores.map((l) => l.nome).join(", ") || "Não vinculados"}
+                  </dd>
+                </div>
+              </dl>
+              <div className="flex flex-wrap items-center gap-2 border-t border-dashed pt-3">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="border-primary/20 bg-accent text-primary hover:border-primary"
+                  onClick={() => setAcao({ item, tipo: "avancar" })}
+                >
+                  {ACAO[item.status]}
+                  <ArrowRight aria-hidden="true" />
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="text-muted-foreground hover:bg-destructive/5 hover:text-destructive"
+                  onClick={() => setAcao({ item, tipo: "cancelar" })}
+                >
+                  Cancelar
+                </Button>
+                {papel === "administrador" && item.lavadores.length === 0 && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setAcao({ item, tipo: "participantes" })}
+                  >
+                    Corrigir lavadores
+                  </Button>
+                )}
+              </div>
+            </li>
+          ))}
+        </ul>
+      </div>
       {acao && (
         <AcaoAtendimento
           item={acao.item}
@@ -294,7 +373,7 @@ function NovoAtendimento({ perfilId, onFechar }: { perfilId: string; onFechar: (
     if (!veiculos.data.length) {
       setNovoVeiculo(true);
       setVeiculoId("");
-    } else if (!novoVeiculo && !veiculoId) setVeiculoId(veiculos.data[0].id);
+    } else if (!novoVeiculo && !veiculoId) setVeiculoId(veiculos.data[0]!.id);
   }, [veiculos.data, novoVeiculo, veiculoId]);
 
   const salvar = useMutation({
@@ -332,21 +411,38 @@ function NovoAtendimento({ perfilId, onFechar }: { perfilId: string; onFechar: (
     setLavadores((lista) => (lista.includes(id) ? lista.filter((x) => x !== id) : [...lista, id]));
 
   return (
-    <form onSubmit={enviar} className="space-y-5 rounded-xl border bg-card p-5">
+    <form
+      onSubmit={enviar}
+      className="lc-panel space-y-6 border-primary/25"
+      aria-label="Registrar chegada"
+    >
       <div className="flex justify-between">
-        <h2 className="text-lg font-semibold">Novo atendimento</h2>
-        <button type="button" className="text-sm text-muted-foreground" onClick={onFechar}>
+        <div>
+          <h2 className="text-lg font-semibold">Novo atendimento</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Registre a chegada e organize a equipe.
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          type="button"
+          className="text-sm text-muted-foreground"
+          onClick={onFechar}
+        >
           Fechar
-        </button>
+        </Button>
       </div>
-      <fieldset className="space-y-2">
-        <legend className="text-sm font-semibold">Cliente</legend>
+      <fieldset className="lc-form-section space-y-3">
+        <legend>
+          <span className="lc-step">01</span>Cliente
+        </legend>
         {cliente ? (
-          <div className="flex justify-between rounded-md border p-3 text-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-accent p-3 text-sm">
             <span>
               {cliente.nome_completo} · {cliente.telefone}
             </span>
-            <button
+            <Button
+              variant="outline"
               type="button"
               className="text-primary"
               onClick={() => {
@@ -355,7 +451,7 @@ function NovoAtendimento({ perfilId, onFechar }: { perfilId: string; onFechar: (
               }}
             >
               Trocar
-            </button>
+            </Button>
           </div>
         ) : novoCliente ? (
           <div className="grid gap-3 sm:grid-cols-2">
@@ -363,6 +459,7 @@ function NovoAtendimento({ perfilId, onFechar }: { perfilId: string; onFechar: (
               Nome
               <input
                 className={campo}
+                autoComplete="name"
                 value={dadosCliente.nome_completo}
                 onChange={(e) =>
                   setDadosCliente({ ...dadosCliente, nome_completo: e.target.value })
@@ -373,40 +470,61 @@ function NovoAtendimento({ perfilId, onFechar }: { perfilId: string; onFechar: (
               Telefone
               <input
                 className={campo}
+                type="tel"
+                autoComplete="tel"
                 value={dadosCliente.telefone}
                 onChange={(e) => setDadosCliente({ ...dadosCliente, telefone: e.target.value })}
               />
             </label>
-            <button
+            <Button
+              variant="outline"
               type="button"
               className="text-left text-sm text-primary"
               onClick={() => setNovoCliente(false)}
             >
               Buscar existente
-            </button>
+            </Button>
           </div>
         ) : (
           <div className="space-y-2">
             <input
               className={campo}
+              aria-label="Buscar cliente por nome, telefone ou placa"
               placeholder="Buscar por nome, telefone ou placa"
               value={busca}
               onChange={(e) => setBusca(e.target.value)}
             />
+            {clientes.isFetching && (
+              <p role="status" className="text-sm text-muted-foreground">
+                Buscando clientes...
+              </p>
+            )}
+            {clientes.error && (
+              <p role="alert" className="lc-message">
+                {mensagemErro(clientes.error)}
+              </p>
+            )}
+            {clientes.data?.length === 0 && buscaDeb.length >= 2 && (
+              <p className="text-sm text-muted-foreground">
+                Nenhum cliente encontrado. Você pode cadastrá-lo abaixo.
+              </p>
+            )}
             <ul className="divide-y rounded-md border empty:hidden">
               {clientes.data?.map((c) => (
                 <li key={c.id}>
-                  <button
+                  <Button
+                    variant="outline"
                     type="button"
                     className="w-full p-2 text-left text-sm"
                     onClick={() => setCliente(c)}
                   >
                     {c.nome_completo} · {c.telefone}
-                  </button>
+                  </Button>
                 </li>
               ))}
             </ul>
-            <button
+            <Button
+              variant="outline"
               type="button"
               className="text-sm text-primary"
               onClick={() => {
@@ -416,17 +534,29 @@ function NovoAtendimento({ perfilId, onFechar }: { perfilId: string; onFechar: (
               }}
             >
               + Cadastrar cliente
-            </button>
+            </Button>
           </div>
         )}
       </fieldset>
       {(cliente || novoCliente) && (
-        <fieldset className="space-y-2">
-          <legend className="text-sm font-semibold">Veículo</legend>
+        <fieldset className="lc-form-section space-y-3">
+          <legend>
+            <span className="lc-step">02</span>Veículo
+          </legend>
+          {veiculos.isFetching && (
+            <p role="status" className="text-sm text-muted-foreground">
+              Carregando veículos...
+            </p>
+          )}
+          {veiculos.error && (
+            <p role="alert" className="lc-message">
+              {mensagemErro(veiculos.error)}
+            </p>
+          )}
           {cliente && !novoVeiculo && !!veiculos.data?.length && (
             <div className="space-y-1">
               {veiculos.data.map((v) => (
-                <label key={v.id} className="flex gap-2 text-sm">
+                <label key={v.id} className="lc-choice">
                   <input
                     type="radio"
                     checked={veiculoId === v.id}
@@ -436,7 +566,8 @@ function NovoAtendimento({ perfilId, onFechar }: { perfilId: string; onFechar: (
                   {v.placa ? ` · ${v.placa}` : ""} ({v.categorias_veiculo?.nome})
                 </label>
               ))}
-              <button
+              <Button
+                variant="outline"
                 type="button"
                 className="text-sm text-primary"
                 onClick={() => {
@@ -445,7 +576,7 @@ function NovoAtendimento({ perfilId, onFechar }: { perfilId: string; onFechar: (
                 }}
               >
                 + Outro veículo
-              </button>
+              </Button>
             </div>
           )}
           {(novoVeiculo || novoCliente) && (
@@ -467,7 +598,10 @@ function NovoAtendimento({ perfilId, onFechar }: { perfilId: string; onFechar: (
               </label>
               {(["marca", "modelo", "placa", "cor"] as const).map((chave) => (
                 <label key={chave} className={rotulo}>
-                  {chave[0].toUpperCase() + chave.slice(1)}
+                  {chave.charAt(0).toUpperCase() + chave.slice(1)}
+                  {(chave === "placa" || chave === "cor") && (
+                    <span className="ml-1 font-normal text-muted-foreground">(opcional)</span>
+                  )}
                   <input
                     className={campo}
                     value={veiculo[chave]}
@@ -484,90 +618,118 @@ function NovoAtendimento({ perfilId, onFechar }: { perfilId: string; onFechar: (
                 />
               </label>
               {cliente && !!veiculos.data?.length && (
-                <button
+                <Button
+                  variant="outline"
                   type="button"
                   className="text-left text-sm text-primary"
                   onClick={() => {
                     setNovoVeiculo(false);
-                    setVeiculoId(veiculos.data![0].id);
+                    setVeiculoId(veiculos.data![0]!.id);
                   }}
                 >
                   Usar veículo existente
-                </button>
+                </Button>
               )}
             </div>
           )}
         </fieldset>
       )}
-      <div className="grid gap-4 sm:grid-cols-2">
-        <label className={rotulo}>
-          Serviço
-          <select
-            className={campo}
-            value={servicoId}
-            onChange={(e) => setServicoId(e.target.value)}
-          >
-            <option value="">Selecione</option>
-            {auxiliares.data?.servicos.map((o) => (
-              <option key={o.id} value={o.id}>
-                {o.nome}
-              </option>
-            ))}
-          </select>
-        </label>
-        <fieldset>
-          <legend className="mb-1 text-sm font-medium">Lavadores</legend>
-          {auxiliares.data?.lavadores.map((o) => (
-            <label key={o.id} className="flex gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={lavadores.includes(o.id)}
-                onChange={() => alternarLavador(o.id)}
-              />
-              {o.nome}
-            </label>
-          ))}
-        </fieldset>
-      </div>
-      <label className="flex gap-2 text-sm">
-        <input
-          type="checkbox"
-          checked={valorDepois}
-          onChange={(e) => setValorDepois(e.target.checked)}
-        />
-        Informar valor depois
-      </label>
-      {!valorDepois && (
-        <label className={rotulo}>
-          Valor final (R$)
+      <fieldset className="lc-form-section">
+        <legend>
+          <span className="lc-step">03</span>Serviço e equipe
+        </legend>
+        {auxiliares.isLoading && (
+          <p role="status" className="mb-3 text-sm text-muted-foreground">
+            Carregando serviços e equipe...
+          </p>
+        )}
+        {auxiliares.error && (
+          <p role="alert" className="lc-message mb-3">
+            {mensagemErro(auxiliares.error)}
+          </p>
+        )}
+        <div className="grid gap-5 sm:grid-cols-2">
+          <label className={rotulo}>
+            Serviço
+            <select
+              className={campo}
+              value={servicoId}
+              onChange={(e) => setServicoId(e.target.value)}
+            >
+              <option value="">Selecione</option>
+              {auxiliares.data?.servicos.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.nome}
+                </option>
+              ))}
+            </select>
+          </label>
+          <fieldset>
+            <legend className="mb-2 text-sm font-semibold">Lavadores</legend>
+            <div className="grid gap-2">
+              {auxiliares.data?.lavadores.map((o) => (
+                <label key={o.id} className="lc-choice">
+                  <input
+                    type="checkbox"
+                    checked={lavadores.includes(o.id)}
+                    onChange={() => alternarLavador(o.id)}
+                  />
+                  {o.nome}
+                </label>
+              ))}
+            </div>
+          </fieldset>
+        </div>
+      </fieldset>
+      <fieldset className="lc-form-section space-y-4">
+        <legend>
+          <span className="lc-step">04</span>Valor e observações
+        </legend>
+        <label className="lc-choice">
           <input
+            type="checkbox"
+            checked={valorDepois}
+            onChange={(e) => setValorDepois(e.target.checked)}
+          />
+          Informar valor depois
+        </label>
+        <p className="text-xs text-muted-foreground">
+          O pagamento é registrado na saída do veículo.
+        </p>
+        {!valorDepois && (
+          <label className={rotulo}>
+            Valor final (R$)
+            <input
+              className={campo}
+              inputMode="decimal"
+              value={valor}
+              onChange={(e) => setValor(e.target.value)}
+            />
+          </label>
+        )}
+        <label className={rotulo}>
+          Observações
+          <textarea
             className={campo}
-            inputMode="decimal"
-            value={valor}
-            onChange={(e) => setValor(e.target.value)}
+            maxLength={500}
+            value={observacoes}
+            onChange={(e) => setObservacoes(e.target.value)}
           />
         </label>
-      )}
-      <label className={rotulo}>
-        Observações
-        <textarea
-          className={campo}
-          maxLength={500}
-          value={observacoes}
-          onChange={(e) => setObservacoes(e.target.value)}
-        />
-      </label>
+      </fieldset>
       {erro && (
-        <p role="alert" className="text-sm text-destructive">
+        <p role="alert" className="lc-message">
           {erro}
         </p>
       )}
-      <button
-        disabled={salvar.isPending}
-        className="w-full rounded-md bg-primary px-4 py-2 text-primary-foreground disabled:opacity-50"
-      >
+      <Button disabled={salvar.isPending} aria-busy={salvar.isPending} className="w-full">
+        {salvar.isPending ? (
+          <LoaderCircle className="animate-spin" aria-hidden="true" />
+        ) : (
+          <Plus aria-hidden="true" />
+        )}
         {salvar.isPending ? "Registrando..." : "Registrar chegada"}
-      </button>
+      </Button>
     </form>
   );
 }
@@ -584,6 +746,11 @@ function AcaoAtendimento({
   aoSalvar: () => void;
 }) {
   const cancelando = tipo === "cancelar";
+  const [gatilho] = useState(() =>
+    typeof document !== "undefined" && document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null,
+  );
   const destino = cancelando ? "cancelado" : proximoStatus(item.status);
   const [motivo, setMotivo] = useState("");
   const [valor, setValor] = useState(
@@ -647,23 +814,36 @@ function AcaoAtendimento({
   });
   const entrega = destino === "entregue";
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="w-full max-w-lg space-y-4 rounded-xl bg-background p-5">
-        <div className="flex justify-between">
-          <h2 className="font-semibold">
+    <Dialog
+      open
+      onOpenChange={(aberto) => {
+        if (!aberto) aoFechar();
+      }}
+    >
+      <DialogContent
+        className="lc-workspace max-h-[90dvh] w-[calc(100%-2rem)] overflow-y-auto rounded-2xl bg-card"
+        onCloseAutoFocus={(evento) => {
+          evento.preventDefault();
+          gatilho?.focus();
+        }}
+      >
+        <div className="pr-6">
+          <DialogTitle>
             {tipo === "participantes"
               ? "Corrigir lavadores"
               : cancelando
                 ? "Cancelar atendimento"
                 : ACAO[item.status]}
-          </h2>
-          <button onClick={aoFechar}>Fechar</button>
+          </DialogTitle>
+          <DialogDescription className="mt-2">
+            {item.nome_cliente_snapshot} · {item.veiculo_snapshot}
+          </DialogDescription>
         </div>
         {tipo === "participantes" && (
           <fieldset className="space-y-2">
             <legend className="text-sm font-medium">Participantes</legend>
             {opcoesLavadores.data?.map((lavador) => (
-              <label key={lavador.id} className="flex gap-2 text-sm">
+              <label key={lavador.id} className="lc-choice">
                 <input
                   type="checkbox"
                   checked={lavadores.includes(lavador.id)}
@@ -694,69 +874,100 @@ function AcaoAtendimento({
           <>
             <label className={rotulo}>
               Valor final (R$)
-              <input className={campo} value={valor} onChange={(e) => setValor(e.target.value)} />
+              <input
+                className={campo}
+                inputMode="decimal"
+                value={valor}
+                onChange={(e) => setValor(e.target.value)}
+              />
             </label>
             <fieldset className="space-y-2">
               <legend className="text-sm font-medium">Pagamentos</legend>
               {pagamentos.map((p, i) => (
-                <div key={i} className="flex gap-2">
-                  <select
-                    className={campo}
-                    value={p.forma_pagamento}
-                    onChange={(e) =>
-                      setPagamentos((lista) =>
-                        lista.map((x, n) =>
-                          n === i ? { ...x, forma_pagamento: e.target.value } : x,
-                        ),
-                      )
-                    }
-                  >
-                    {["dinheiro", "pix", "debito", "credito", "outro"].map((f) => (
-                      <option key={f} value={f}>
-                        {f}
-                      </option>
-                    ))}
-                  </select>
-                  <input
-                    className={campo}
-                    inputMode="decimal"
-                    placeholder="Valor"
-                    value={p.valor}
-                    onChange={(e) =>
-                      setPagamentos((lista) =>
-                        lista.map((x, n) => (n === i ? { ...x, valor: e.target.value } : x)),
-                      )
-                    }
-                  />
+                <div
+                  key={i}
+                  className="grid grid-cols-2 items-end gap-2 rounded-xl border bg-muted/50 p-3"
+                >
+                  <label className={rotulo}>
+                    Forma {i + 1}
+                    <select
+                      className={campo}
+                      value={p.forma_pagamento}
+                      onChange={(e) =>
+                        setPagamentos((lista) =>
+                          lista.map((x, n) =>
+                            n === i ? { ...x, forma_pagamento: e.target.value } : x,
+                          ),
+                        )
+                      }
+                    >
+                      {["dinheiro", "pix", "debito", "credito", "outro"].map((f) => (
+                        <option key={f} value={f}>
+                          {
+                            {
+                              dinheiro: "Dinheiro",
+                              pix: "PIX",
+                              debito: "Débito",
+                              credito: "Crédito",
+                              outro: "Outro",
+                            }[f]
+                          }
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className={rotulo}>
+                    Valor (R$)
+                    <input
+                      className={campo}
+                      inputMode="decimal"
+                      placeholder="Valor"
+                      value={p.valor}
+                      onChange={(e) =>
+                        setPagamentos((lista) =>
+                          lista.map((x, n) => (n === i ? { ...x, valor: e.target.value } : x)),
+                        )
+                      }
+                    />
+                  </label>
                   {pagamentos.length > 1 && (
-                    <button
+                    <Button
+                      variant="outline"
+                      className="col-span-2 text-destructive"
+                      aria-label={`Remover pagamento ${i + 1}`}
                       onClick={() => setPagamentos((lista) => lista.filter((_, n) => n !== i))}
                     >
                       Remover
-                    </button>
+                    </Button>
                   )}
                 </div>
               ))}
-              <button
+              <Button
+                variant="outline"
                 className="text-sm text-primary"
                 onClick={() =>
                   setPagamentos((lista) => [...lista, { forma_pagamento: "pix", valor: "" }])
                 }
               >
                 + Dividir pagamento
-              </button>
+              </Button>
             </fieldset>
           </>
         )}
-        {erro && <p className="text-sm text-destructive">{erro}</p>}
-        <button
+        {erro && (
+          <p role="alert" className="lc-message">
+            {erro}
+          </p>
+        )}
+        <Button
           disabled={salvar.isPending}
-          className="w-full rounded-md bg-primary px-4 py-2 text-primary-foreground"
+          aria-busy={salvar.isPending}
+          className="w-full"
           onClick={() => salvar.mutate()}
         >
           {salvar.isPending ? "Salvando..." : "Confirmar"}
-        </button>
-      </div>
-    </div>
+        </Button>
+      </DialogContent>
+    </Dialog>
   );
 }

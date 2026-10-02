@@ -1,9 +1,24 @@
+import { LogoAutoClean } from "@/components/LogoAutoClean";
 import { useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState, type ReactNode } from "react";
+import { LoaderCircle, LogOut, Menu, ShieldCheck, UserRound } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { Button } from "@/components/ui/button";
 
-export function AreaLayout({ titulo, nome, children }: { titulo: string; nome: string; children: ReactNode }) {
+export function AreaLayout({
+  titulo,
+  nome,
+  children,
+  navigation,
+  secao,
+}: {
+  titulo: string;
+  nome: string;
+  children: ReactNode;
+  navigation?: ReactNode;
+  secao?: string;
+}) {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const [saindo, setSaindo] = useState(false);
@@ -17,21 +32,74 @@ export function AreaLayout({ titulo, nome, children }: { titulo: string; nome: s
   }
 
   return (
-    <div className="min-h-screen bg-muted">
-      <header className="flex items-center justify-between border-b bg-card px-6 py-4">
-        <div>
-          <p className="text-lg font-bold text-primary">LavaClean</p>
-          <p className="text-sm text-muted-foreground">{titulo}</p>
+    <div className="lc-workspace min-h-screen bg-background lg:grid lg:grid-cols-[232px_minmax(0,1fr)]">
+      <a href="#conteudo-principal" className="lc-skip">
+        Pular para o conteúdo
+      </a>
+      <aside className="lc-sidebar sticky top-0 hidden h-dvh flex-col px-4 py-6 lg:flex">
+        <div className="mb-8 px-3">
+          <LogoAutoClean className="mb-4 aspect-square w-full rounded-xl object-contain" />
+          <p className="lc-brand text-white">
+            LavaClean<span className="text-[var(--brand-cyan)]">.</span>
+          </p>
+          <p className="mt-1 text-xs text-sidebar-foreground/70">Gestão do lava jato</p>
         </div>
-        <div className="flex items-center gap-3">
-          <span className="hidden text-sm text-foreground sm:inline">{nome}</span>
-          <button onClick={sair} disabled={saindo}
-            className="rounded-md border border-input bg-background px-3 py-1.5 text-sm hover:bg-accent disabled:opacity-60">
-            {saindo ? "Saindo..." : "Sair"}
-          </button>
+        <p className="mb-3 px-4 text-[10px] font-semibold uppercase tracking-[0.18em] text-sidebar-foreground/60">
+          Seu espaço de trabalho
+        </p>
+        {navigation}
+        <div className="mt-auto border-t border-sidebar-border px-3 pt-5">
+          <p className="flex items-center gap-2 text-xs text-sidebar-foreground/80">
+            <ShieldCheck className="size-4 text-[var(--brand-cyan)]" aria-hidden="true" />
+            {titulo}
+          </p>
         </div>
-      </header>
-      <main className="mx-auto max-w-4xl p-6">{children}</main>
+      </aside>
+      <div className="min-w-0">
+        <header className="flex min-h-20 items-center justify-between gap-3 border-b bg-card px-4 sm:px-7 lg:px-9">
+          <div className="flex min-w-0 items-center gap-3">
+            <LogoAutoClean className="size-12 shrink-0 rounded-lg object-contain lg:hidden" />
+            <div>
+              <p className="lc-eyebrow hidden lg:block">LavaClean / Gestão</p>
+              <p className="text-sm font-semibold sm:text-base">{secao ?? titulo}</p>
+            </div>
+          </div>
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="hidden size-9 items-center justify-center rounded-full border bg-muted text-primary sm:flex">
+              <UserRound className="size-4" aria-hidden="true" />
+            </div>
+            <div className="hidden max-w-48 sm:block">
+              <p className="truncate text-sm font-semibold">{nome}</p>
+              <p className="text-xs text-muted-foreground">{titulo}</p>
+            </div>
+            <Button onClick={sair} disabled={saindo} aria-busy={saindo} variant="ghost" size="sm">
+              {saindo ? (
+                <LoaderCircle className="animate-spin" aria-hidden="true" />
+              ) : (
+                <LogOut aria-hidden="true" />
+              )}
+              {saindo ? "Saindo..." : "Sair"}
+            </Button>
+          </div>
+        </header>
+        <div className="px-4 pt-4 sm:px-7 lg:hidden">
+          <details className="lc-sidebar lc-mobile-nav">
+            <summary>
+              <Menu className="size-4" aria-hidden="true" />
+              <span>Menu do sistema</span>
+              <span className="ml-auto text-xs text-sidebar-foreground/70">{secao}</span>
+            </summary>
+            {navigation}
+          </details>
+        </div>
+        <main
+          id="conteudo-principal"
+          tabIndex={-1}
+          className="mx-auto max-w-[1440px] p-4 pb-10 sm:p-7 lg:p-9"
+        >
+          {children}
+        </main>
+      </div>
     </div>
   );
 }

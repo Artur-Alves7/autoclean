@@ -1,3 +1,6 @@
+import { Button } from "@/components/ui/button";
+import { CarFront, Search, UsersRound } from "lucide-react";
+import { StatusBadge } from "@/components/StatusBadge";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
@@ -112,46 +115,74 @@ export function ClientesVeiculos({ papel }: { papel: Papel }) {
   });
 
   return (
-    <section className="space-y-4">
-      <div>
-        <h1 className="text-xl font-semibold">Clientes e veículos</h1>
-        <p className="text-sm text-muted-foreground">Pesquise por nome, telefone ou placa.</p>
+    <section className="lc-page">
+      <div className="lc-page-heading">
+        <div>
+          <span className="lc-eyebrow">Relacionamento</span>
+          <h1 className="text-2xl font-bold tracking-tight">Clientes e veículos</h1>
+          <p className="text-sm text-muted-foreground">Pesquise por nome, telefone ou placa.</p>
+        </div>
       </div>
-      <input
-        className="w-full rounded-md border bg-background px-3 py-2"
-        value={busca}
-        onChange={(evento) => setBusca(evento.target.value)}
-        placeholder="Nome, telefone ou placa"
-      />
+      <label className="lc-label">
+        <span className="sr-only">Buscar cliente por nome, telefone ou placa</span>
+        <div className="relative">
+          <Search
+            className="pointer-events-none absolute left-3.5 top-3.5 size-4 text-muted-foreground"
+            aria-hidden="true"
+          />
+          <input
+            className="lc-field !pl-10"
+            value={busca}
+            onChange={(evento) => setBusca(evento.target.value)}
+            placeholder="Nome, telefone ou placa"
+          />
+        </div>
+      </label>
       {clientes.isFetching && <p className="text-sm text-muted-foreground">Buscando...</p>}
       {clientes.error && <p className="text-sm text-destructive">{mensagemErro(clientes.error)}</p>}
-      <div className="grid gap-4 lg:grid-cols-[minmax(240px,1fr)_2fr]">
-        <ul className="divide-y rounded-lg border bg-card">
+      {busca.trim().length < 2 && (
+        <div className="lc-empty">
+          <Search aria-hidden="true" />
+          <p className="font-medium text-foreground">Encontre seu cliente</p>
+          <p className="mt-1">Digite pelo menos 2 caracteres para começar.</p>
+        </div>
+      )}
+      {clientes.data?.length === 0 && busca.trim().length >= 2 && (
+        <p className="lc-empty">Nenhum cliente encontrado para esta busca.</p>
+      )}
+      <div className="grid items-start gap-5 xl:grid-cols-[minmax(240px,1fr)_2fr]">
+        <ul className="divide-y overflow-hidden rounded-xl border bg-card empty:hidden">
           {clientes.data?.map((cliente) => (
             <li key={cliente.id}>
-              <button
-                className="w-full px-4 py-3 text-left hover:bg-accent"
+              <Button
+                variant="outline"
+                className={`!block w-full !rounded-none !border-0 !px-4 !py-4 text-left !shadow-none ${selecionado?.id === cliente.id ? "bg-accent" : ""}`}
+                aria-pressed={selecionado?.id === cliente.id}
                 onClick={() => setSelecionado(cliente)}
                 type="button"
               >
                 <span className="block font-medium">{cliente.nome_completo}</span>
                 <span className="text-sm text-muted-foreground">{cliente.telefone}</span>
                 {!cliente.ativo && <span className="ml-2 text-xs text-destructive">Inativo</span>}
-              </button>
+              </Button>
             </li>
           ))}
         </ul>
 
         {selecionado && (
-          <div className="space-y-4 rounded-lg border bg-card p-4">
+          <div className="lc-panel space-y-6">
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div>
-                <h2 className="font-semibold">{selecionado.nome_completo}</h2>
+                <h2 className="flex items-center gap-2 text-lg font-semibold">
+                  <UsersRound className="size-5 text-primary" aria-hidden="true" />
+                  {selecionado.nome_completo}
+                </h2>
                 <p className="text-sm text-muted-foreground">{selecionado.telefone}</p>
               </div>
               {papel === "administrador" && (
                 <div className="flex gap-2">
-                  <button
+                  <Button
+                    variant="outline"
                     type="button"
                     className="rounded-md border px-3 py-1.5 text-sm"
                     onClick={() => {
@@ -172,8 +203,9 @@ export function ClientesVeiculos({ papel }: { papel: Papel }) {
                     }}
                   >
                     Editar
-                  </button>
-                  <button
+                  </Button>
+                  <Button
+                    variant="outline"
                     type="button"
                     className="rounded-md border px-3 py-1.5 text-sm"
                     onClick={() =>
@@ -185,18 +217,29 @@ export function ClientesVeiculos({ papel }: { papel: Papel }) {
                     }
                   >
                     {selecionado.ativo ? "Desativar" : "Reativar"}
-                  </button>
+                  </Button>
                 </div>
               )}
             </div>
 
             <div>
-              <h3 className="mb-2 font-medium">Veículos</h3>
+              <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold">
+                <CarFront className="size-4 text-primary" aria-hidden="true" />
+                Veículos
+              </h3>
+              {detalhes.error && (
+                <p role="alert" className="lc-message mb-3">
+                  {mensagemErro(detalhes.error)}
+                </p>
+              )}
+              {detalhes.data?.veiculos.length === 0 && (
+                <p className="lc-empty">Nenhum veículo cadastrado.</p>
+              )}
               {detalhes.isLoading && <p className="text-sm text-muted-foreground">Carregando...</p>}
               <ul className="space-y-2">
                 {detalhes.data?.veiculos.map((veiculo) => (
                   <li key={veiculo.id} className="rounded-md border p-3 text-sm">
-                    <div className="flex justify-between gap-2">
+                    <div className="flex flex-wrap justify-between gap-3">
                       <span>
                         <strong>
                           {veiculo.marca} {veiculo.modelo}
@@ -210,9 +253,10 @@ export function ClientesVeiculos({ papel }: { papel: Papel }) {
                       </span>
                       {papel === "administrador" && (
                         <span className="flex gap-2">
-                          <button
+                          <Button
+                            variant="outline"
                             type="button"
-                            className="text-primary hover:underline"
+                            className="text-primary"
                             onClick={() => {
                               const marca = window.prompt("Marca", veiculo.marca);
                               if (marca === null) return;
@@ -235,10 +279,11 @@ export function ClientesVeiculos({ papel }: { papel: Papel }) {
                             }}
                           >
                             Editar
-                          </button>
-                          <button
+                          </Button>
+                          <Button
+                            variant="outline"
                             type="button"
-                            className="text-primary hover:underline"
+                            className="text-primary"
                             onClick={() =>
                               atualizar.mutate({
                                 tabela: "veiculos",
@@ -248,7 +293,7 @@ export function ClientesVeiculos({ papel }: { papel: Papel }) {
                             }
                           >
                             {veiculo.ativo ? "Desativar" : "Reativar"}
-                          </button>
+                          </Button>
                         </span>
                       )}
                     </div>
@@ -259,7 +304,8 @@ export function ClientesVeiculos({ papel }: { papel: Papel }) {
                         .map((atendimento) => (
                           <li key={atendimento.id}>
                             {formatarDataHora(atendimento.chegou_em)} ·{" "}
-                            {atendimento.servico_snapshot} · {atendimento.status}
+                            {atendimento.servico_snapshot} ·{" "}
+                            <StatusBadge status={atendimento.status} />
                           </li>
                         ))}
                       {!detalhes.data.atendimentos.some(
@@ -278,7 +324,9 @@ export function ClientesVeiculos({ papel }: { papel: Papel }) {
                   <li key={atendimento.id} className="rounded-md bg-muted p-3">
                     {formatarDataHora(atendimento.chegou_em)} · {atendimento.veiculo_snapshot} ·{" "}
                     {atendimento.servico_snapshot}
-                    <span className="ml-2 font-medium">{atendimento.status}</span>
+                    <span className="ml-2 inline-block">
+                      <StatusBadge status={atendimento.status} />
+                    </span>
                   </li>
                 ))}
                 {detalhes.data?.atendimentos.length === 0 && (
@@ -290,7 +338,7 @@ export function ClientesVeiculos({ papel }: { papel: Papel }) {
         )}
       </div>
       {mensagem && (
-        <p role="status" className="text-sm">
+        <p role="status" className="lc-message">
           {mensagem}
         </p>
       )}
