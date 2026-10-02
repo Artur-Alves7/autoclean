@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { FilaAtendimentos } from "@/components/Atendimentos";
+import { Fechamentos } from "@/components/Fechamentos";
 import { PainelSistema } from "@/components/PainelSistema";
 import { StatusBadge } from "@/components/StatusBadge";
 
@@ -57,6 +58,31 @@ function renderFila(
   return render(
     <QueryClientProvider client={qc}>
       <FilaAtendimentos perfilId="lavador-teste" papel={papel} />
+    </QueryClientProvider>,
+  );
+}
+
+function renderFechamentos(papel: "administrador" | "lavador") {
+  const qc = clienteDeTeste([]);
+  const hoje = new Date().toISOString().slice(0, 10);
+  qc.setQueryData(
+    ["atendimentos-fechamento", hoje],
+    [
+      {
+        id: "atendimento-entregue-teste",
+        entregue_em: `${hoje}T12:00:00-03:00`,
+        nome_cliente_snapshot: "Cliente de teste",
+        veiculo_snapshot: "Veículo de teste",
+        valor_final: 100,
+        valor_empresa_snapshot: 40,
+        total_pago: 100,
+        lavadores: [{ perfil_id: "lavador-teste", nome: "Lavador de teste", ordem_rateio: 1 }],
+      },
+    ],
+  );
+  return render(
+    <QueryClientProvider client={qc}>
+      <Fechamentos perfilId="lavador-teste" papel={papel} />
     </QueryClientProvider>,
   );
 }
@@ -311,6 +337,90 @@ describe("interface operacional", () => {
         }),
       ),
     );
+  });
+
+  it("registra pagamento dividido com centavos e mostra a conferência", async () => {
+    renderFila([{ ...filaTeste[0]!, valor_final: 100.03 }]);
+    fireEvent.click(screen.getByRole("button", { name: "Registrar entrega" }));
+    fireEvent.change(screen.getByLabelText("Valor (R$)", { exact: true }), {
+      target: { value: "60,01" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Dividir pagamento/ }));
+    const valores = screen.getAllByLabelText("Valor (R$)", { exact: true });
+    fireEvent.change(valores[1]!, { target: { value: "40,02" } });
+    fireEvent.change(screen.getByLabelText("Forma 2"), { target: { value: "dinheiro" } });
+
+    expect(screen.getByText(/Total informado: R\$ 100,03.*Valor conferido/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
+
+    await waitFor(() =>
+      expect(mocks.rpc).toHaveBeenCalledWith("rpc_avancar_atendimento", {
+        p_atendimento_id: "atendimento-teste",
+        p_novo_status: "entregue",
+        p_motivo: null,
+        p_valor_final: 100.03,
+        p_pagamentos: [
+          { forma_pagamento: "pix", valor_centavos: 6001 },
+          { forma_pagamento: "dinheiro", valor_centavos: 4002 },
+        ],
+      }),
+    );
+  });
+
+  it("não substitui pagamentos ao avançar uma etapa sem entrega", async () => {
+    renderFila([{ ...filaTeste[0]!, status: "em_lavagem", valor_final: 100 }]);
+    fireEvent.click(screen.getByRole("button", { name: "Marcar como pronto" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
+    await waitFor(() =>
+      expect(mocks.rpc).toHaveBeenCalledWith(
+        "rpc_avancar_atendimento",
+        expect.objectContaining({
+          p_novo_status: "pronto_para_retirada",
+          p_pagamentos: null,
+        }),
+      ),
+    );
+  });
+
+  it("bloqueia dois cliques rápidos ao registrar a entrega", async () => {
+    let concluir!: (resultado: { error: null }) => void;
+    mocks.rpc.mockReturnValueOnce(
+      new Promise<{ error: null }>((resolve) => {
+        concluir = resolve;
+      }),
+    );
+    renderFila();
+    fireEvent.click(screen.getByRole("button", { name: "Registrar entrega" }));
+    const confirmar = screen.getByRole("button", { name: "Confirmar" });
+    fireEvent.click(confirmar);
+    fireEvent.click(confirmar);
+
+    await waitFor(() => expect(mocks.rpc).toHaveBeenCalledTimes(1));
+    concluir({ error: null });
+  });
+
+  it.each([
+    ["administrador", true],
+    ["lavador", false],
+  ] as const)("restringe a correção financeira entregue para %s", (papel, podeCorrigir) => {
+    renderFechamentos(papel);
+    if (podeCorrigir) {
+      expect(screen.getByRole("button", { name: "Corrigir" })).toBeInTheDocument();
+    } else {
+      expect(screen.queryByRole("button", { name: "Corrigir" })).not.toBeInTheDocument();
+    }
+  });
+
+  it("impede correção administrativa com valor final zero", async () => {
+    vi.spyOn(window, "prompt")
+      .mockReturnValueOnce("0")
+      .mockReturnValueOnce("pix")
+      .mockReturnValueOnce("Ajuste financeiro de teste");
+    renderFechamentos("administrador");
+    fireEvent.click(screen.getByRole("button", { name: "Corrigir" }));
+
+    expect(await screen.findByRole("status")).toHaveTextContent("maior que zero");
+    expect(mocks.rpc).not.toHaveBeenCalled();
   });
 
   it("mantém a navegação do lavador sem ações administrativas", async () => {

@@ -20,6 +20,7 @@ import { montarParametrosNovoAtendimento, prepararBuscaCliente } from "@/lib/ate
 import {
   proximoStatus,
   reaisParaCentavos,
+  somaPagamentosCentavos,
   type PagamentoEntrada,
   type StatusAtendimento,
   validarEntrega,
@@ -771,8 +772,11 @@ function AcaoAtendimento({
   const [valor, setValor] = useState(
     item.valor_final == null ? "" : String(item.valor_final).replace(".", ","),
   );
-  const [pagamentos, setPagamentos] = useState([{ forma_pagamento: "pix", valor: valor }]);
+  const [pagamentos, setPagamentos] = useState<
+    { forma_pagamento: PagamentoEntrada["forma_pagamento"]; valor: string }[]
+  >([{ forma_pagamento: "pix", valor }]);
   const [erro, setErro] = useState<string | null>(null);
+  const salvandoRef = useRef(false);
   const [lavadores, setLavadores] = useState<string[]>(item.lavadores.map((l) => l.perfil_id));
   const opcoesLavadores = useQuery({
     queryKey: ["lavadores-ativos"],
@@ -804,15 +808,16 @@ function AcaoAtendimento({
       if (!destino) throw new Error("Transição inválida.");
       if (cancelando && motivo.trim().length < 3)
         throw new Error("Informe o motivo do cancelamento.");
-      let lista: PagamentoEntrada[] = [];
+      let lista: PagamentoEntrada[] | null = null;
       let valorFinal = item.valor_final;
       if (destino === "entregue") {
-        valorFinal = reaisParaCentavos(valor) / 100;
+        const valorFinalCentavos = reaisParaCentavos(valor);
+        valorFinal = valorFinalCentavos / 100;
         lista = pagamentos.map((p) => ({
-          forma_pagamento: p.forma_pagamento as PagamentoEntrada["forma_pagamento"],
+          forma_pagamento: p.forma_pagamento,
           valor_centavos: reaisParaCentavos(p.valor),
         }));
-        const validacao = validarEntrega(reaisParaCentavos(valor), item.lavadores.length, lista);
+        const validacao = validarEntrega(valorFinalCentavos, item.lavadores.length, lista);
         if (validacao) throw new Error(validacao);
       }
       const { error } = await db().rpc("rpc_avancar_atendimento", {
@@ -828,6 +833,31 @@ function AcaoAtendimento({
     onError: (e) => setErro(mensagemErro(e)),
   });
   const entrega = destino === "entregue";
+  const resumoPagamento = (() => {
+    if (!entrega) return null;
+    try {
+      const valorFinalCentavos = reaisParaCentavos(valor);
+      const totalCentavos = somaPagamentosCentavos(
+        pagamentos.map((pagamento) => ({
+          forma_pagamento: pagamento.forma_pagamento,
+          valor_centavos: reaisParaCentavos(pagamento.valor),
+        })),
+      );
+      return { valorFinalCentavos, totalCentavos };
+    } catch {
+      return null;
+    }
+  })();
+  const confirmar = () => {
+    if (salvandoRef.current) return;
+    salvandoRef.current = true;
+    setErro(null);
+    salvar.mutate(undefined, {
+      onSettled: () => {
+        salvandoRef.current = false;
+      },
+    });
+  };
   return (
     <Dialog
       open
@@ -911,7 +941,13 @@ function AcaoAtendimento({
                       onChange={(e) =>
                         setPagamentos((lista) =>
                           lista.map((x, n) =>
-                            n === i ? { ...x, forma_pagamento: e.target.value } : x,
+                            n === i
+                              ? {
+                                  ...x,
+                                  forma_pagamento: e.target
+                                    .value as PagamentoEntrada["forma_pagamento"],
+                                }
+                              : x,
                           ),
                         )
                       }
@@ -947,6 +983,7 @@ function AcaoAtendimento({
                   </label>
                   {pagamentos.length > 1 && (
                     <Button
+                      type="button"
                       variant="outline"
                       className="col-span-2 text-destructive"
                       aria-label={`Remover pagamento ${i + 1}`}
@@ -958,6 +995,7 @@ function AcaoAtendimento({
                 </div>
               ))}
               <Button
+                type="button"
                 variant="outline"
                 className="text-sm text-primary"
                 onClick={() =>
@@ -966,6 +1004,22 @@ function AcaoAtendimento({
               >
                 + Dividir pagamento
               </Button>
+              {resumoPagamento && (
+                <p className="text-sm text-muted-foreground" aria-live="polite">
+                  Total informado: {formatarDinheiro(resumoPagamento.totalCentavos / 100)} ·{" "}
+                  {resumoPagamento.totalCentavos === resumoPagamento.valorFinalCentavos
+                    ? "Valor conferido"
+                    : resumoPagamento.totalCentavos < resumoPagamento.valorFinalCentavos
+                      ? `Falta ${formatarDinheiro(
+                          (resumoPagamento.valorFinalCentavos - resumoPagamento.totalCentavos) /
+                            100,
+                        )}`
+                      : `Excede ${formatarDinheiro(
+                          (resumoPagamento.totalCentavos - resumoPagamento.valorFinalCentavos) /
+                            100,
+                        )}`}
+                </p>
+              )}
             </fieldset>
           </>
         )}
@@ -975,10 +1029,11 @@ function AcaoAtendimento({
           </p>
         )}
         <Button
+          type="button"
           disabled={salvar.isPending}
           aria-busy={salvar.isPending}
           className="w-full"
-          onClick={() => salvar.mutate()}
+          onClick={confirmar}
         >
           {salvar.isPending ? "Salvando..." : "Confirmar"}
         </Button>

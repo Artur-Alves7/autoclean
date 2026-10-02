@@ -130,6 +130,7 @@ export function Fechamentos({ perfilId, papel }: { perfilId: string; papel: Pape
       const motivo = window.prompt("Motivo da correção (obrigatório)");
       if (!motivo || motivo.trim().length < 5) throw new Error("Informe o motivo da correção.");
       const centavos = reaisParaCentavos(valorTexto);
+      if (centavos <= 0) throw new Error("Informe um valor final maior que zero.");
       const { error } = await db().rpc("rpc_corrigir_atendimento_entregue", {
         p_atendimento_id: item.id,
         p_valor_final: centavos / 100,
