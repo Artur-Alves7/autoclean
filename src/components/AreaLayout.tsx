@@ -13,7 +13,7 @@ export function AreaLayout({ titulo, nome, children }: { titulo: string; nome: s
     await qc.cancelQueries();
     qc.clear();
     await supabase.auth.signOut();
-    navigate({ to: "/", search: { msg: undefined }, replace: true });
+    navigate({ to: "/", replace: true });
   }
 
   return (
