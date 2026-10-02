@@ -44,7 +44,7 @@ type ClienteAdministrativo = {
     admin: {
       inviteUserByEmail: (
         email: string,
-        opcoes: { data: Record<string, unknown> },
+        opcoes: { data: Record<string, unknown>; redirectTo?: string },
       ) => Promise<Resultado<{ user: { id: string } | null }, ErroAutenticacao>>;
     };
   };
@@ -125,12 +125,15 @@ export function criarHandlerConvite({
       const admin = createClient(supabaseUrl, serviceRoleKey, {
         auth: { autoRefreshToken: false, persistSession: false },
       }) as ClienteAdministrativo;
+      const redirectTo = criarUrlDefinicaoSenha(request.headers.get("Origin"));
       const { data, error } = await admin.auth.admin.inviteUserByEmail(entrada.email.trim(), {
         data: {
           nome_completo: entrada.nome_completo.trim(),
           telefone,
           papel: entrada.papel,
+          primeiro_acesso_pendente: true,
         },
+        ...(redirectTo ? { redirectTo } : {}),
       });
       if (error) {
         if (
@@ -193,6 +196,18 @@ export function criarHandlerConvite({
       );
     }
   };
+}
+
+function criarUrlDefinicaoSenha(origem: string | null) {
+  if (!origem) return undefined;
+  try {
+    const url = new URL(origem);
+    const local = url.hostname === "localhost" || url.hostname === "127.0.0.1";
+    if (url.protocol !== "https:" && !(local && url.protocol === "http:")) return undefined;
+    return new URL("/definir-senha?origem=convite", url.origin).toString();
+  } catch {
+    return undefined;
+  }
 }
 
 function resposta(corpo: unknown, status: number, headers: Record<string, string> = {}) {

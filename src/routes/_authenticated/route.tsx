@@ -13,10 +13,14 @@ export const Route = createFileRoute("/_authenticated")({
       throw redirect({ to: "/", search: e instanceof Error ? { msg: e.message } : {} });
     }
     if (!acesso) throw redirect({ to: "/" });
+    if (acesso.primeiroAcessoPendente)
+      throw redirect({ to: "/definir-senha", search: { origem: "convite" } });
     return { acesso };
   },
   pendingComponent: () => (
-    <div className="flex min-h-screen items-center justify-center text-muted-foreground">Carregando...</div>
+    <div className="flex min-h-screen items-center justify-center text-muted-foreground">
+      Carregando...
+    </div>
   ),
   component: () => <Outlet />,
 });

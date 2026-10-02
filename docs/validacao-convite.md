@@ -178,9 +178,9 @@ execute apenas quando decidir fazê-lo, manualmente.
 - [ ] Aceitação: abrir o e-mail numa sessão separada, aceitar o convite e
       confirmar entrada na área de lavador. Conferir o Site URL/redirecionamento
       do Auth se o link não voltar à aplicação. Testar também sair e entrar novamente.
-      A versão atual não contém tela explícita para definir/redefinir senha;
-      se o primeiro acesso ou o login posterior depender dela, registrar essa
-      pendência, sem marcar o fluxo como concluído.
+      O roteiro detalhado de definição e recuperação de senha está em
+      `docs/validacao-acesso-inicial.md`; não marcar o fluxo como concluído sem
+      percorrê-lo com um convite e uma caixa de e-mail de teste reais.
 - [ ] Lavador: cadastrar cliente e veículo fictícios, testar placa vazia e placa
       válida, criar atendimento com preço pendente e associar dois participantes.
       Confirmar ausência de duplicação e de erro em placa_normalizada.

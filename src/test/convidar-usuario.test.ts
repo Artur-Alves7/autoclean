@@ -61,12 +61,14 @@ function preparar(existente = false) {
 function requisicao(
   body: unknown = corpoValido,
   authorization: string | null = "Bearer jwt-simulado",
+  origin: string | null = "https://app.teste.invalid",
 ) {
   return new Request("https://teste.invalid/convidar-usuario", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       ...(authorization ? { Authorization: authorization } : {}),
+      ...(origin ? { Origin: origin } : {}),
     },
     body: JSON.stringify(body),
   });
@@ -232,10 +234,27 @@ describe("contrato HTTP da função de convite (Supabase simulado)", () => {
     expect(body).toEqual({ usuario_id: "auth-teste", perfil_id: "perfil-teste" });
     expect(m.createClient).toHaveBeenCalledTimes(2);
     expect(m.invite).toHaveBeenCalledWith(corpoValido.email, {
-      data: { nome_completo: corpoValido.nome_completo, telefone: null, papel: "lavador" },
+      data: {
+        nome_completo: corpoValido.nome_completo,
+        telefone: null,
+        papel: "lavador",
+        primeiro_acesso_pendente: true,
+      },
+      redirectTo: "https://app.teste.invalid/definir-senha?origem=convite",
     });
     expect(existente ? m.atualizar : m.inserir).toHaveBeenCalledTimes(1);
     expect(m.papel).toHaveBeenCalledWith({ perfil_id: "perfil-teste", papel: "lavador" });
+  });
+
+  it("não repassa origem HTTP externa como redirecionamento do convite", async () => {
+    const m = preparar();
+    await conferir(
+      await m.handler(requisicao(corpoValido, "Bearer jwt-simulado", "http://app.teste.invalid")),
+      200,
+    );
+    expect(m.invite).toHaveBeenCalledWith(corpoValido.email, {
+      data: expect.objectContaining({ primeiro_acesso_pendente: true }),
+    });
   });
 
   it.each(["buscar", "salvar", "remover", "papel"] as const)(

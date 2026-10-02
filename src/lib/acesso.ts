@@ -2,7 +2,12 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 
 export type Papel = "administrador" | "lavador";
-export type Acesso = { perfilId: string; nome: string; papel: Papel };
+export type Acesso = {
+  perfilId: string;
+  nome: string;
+  papel: Papel;
+  primeiroAcessoPendente: boolean;
+};
 
 export class AcessoNegado extends Error {}
 
@@ -19,7 +24,10 @@ export async function carregarAcesso(): Promise<Acesso | null> {
     .eq("usuario_auth_id", u.user.id)
     .maybeSingle();
   if (pe) throw new Error("Não foi possível consultar seu perfil. Tente novamente.");
-  if (!perfil) throw new AcessoNegado("Seu usuário não possui um perfil cadastrado no LavaClean. Procure o administrador.");
+  if (!perfil)
+    throw new AcessoNegado(
+      "Seu usuário não possui um perfil cadastrado no LavaClean. Procure o administrador.",
+    );
   if (!perfil.ativo) throw new AcessoNegado("Seu perfil está inativo. Procure o administrador.");
 
   const { data: papeis, error: re } = await db()
@@ -33,9 +41,17 @@ export async function carregarAcesso(): Promise<Acesso | null> {
     : lista.includes("lavador")
       ? "lavador"
       : null;
-  if (!papel) throw new AcessoNegado("Seu perfil não possui um papel de acesso válido. Procure o administrador.");
+  if (!papel)
+    throw new AcessoNegado(
+      "Seu perfil não possui um papel de acesso válido. Procure o administrador.",
+    );
 
-  return { perfilId: perfil.id, nome: perfil.nome_completo, papel };
+  return {
+    perfilId: perfil.id,
+    nome: perfil.nome_completo,
+    papel,
+    primeiroAcessoPendente: u.user.user_metadata?.["primeiro_acesso_pendente"] === true,
+  };
 }
 
 export const destinoDoPapel = (p: Papel) => (p === "administrador" ? "/admin" : "/lavador");
