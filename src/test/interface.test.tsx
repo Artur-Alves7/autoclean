@@ -5,6 +5,7 @@ import { FilaAtendimentos } from "@/components/Atendimentos";
 import { Fechamentos } from "@/components/Fechamentos";
 import { PainelSistema } from "@/components/PainelSistema";
 import { StatusBadge } from "@/components/StatusBadge";
+import { dataLocalIso } from "@/lib/fechamento";
 
 const mocks = vi.hoisted(() => ({
   rpc: vi.fn().mockResolvedValue({ error: null }),
@@ -62,12 +63,19 @@ function renderFila(
   );
 }
 
-function renderFechamentos(papel: "administrador" | "lavador") {
+function renderFechamentos(
+  papel: "administrador" | "lavador",
+  opcoes: {
+    atendimentos?: unknown[];
+    fechamento?: { id: string; status: string; confirmado_em: string | null } | null;
+    ajustes?: { id: string; valor: number }[];
+  } = {},
+) {
   const qc = clienteDeTeste([]);
-  const hoje = new Date().toISOString().slice(0, 10);
+  const hoje = dataLocalIso();
   qc.setQueryData(
     ["atendimentos-fechamento", hoje],
-    [
+    opcoes.atendimentos ?? [
       {
         id: "atendimento-entregue-teste",
         entregue_em: `${hoje}T12:00:00-03:00`,
@@ -80,6 +88,8 @@ function renderFechamentos(papel: "administrador" | "lavador") {
       },
     ],
   );
+  qc.setQueryData(["fechamento-diario", hoje], opcoes.fechamento ?? null);
+  qc.setQueryData(["ajustes-repasse-pendentes", hoje], opcoes.ajustes ?? []);
   return render(
     <QueryClientProvider client={qc}>
       <Fechamentos perfilId="lavador-teste" papel={papel} />
@@ -421,6 +431,62 @@ describe("interface operacional", () => {
 
     expect(await screen.findByRole("status")).toHaveTextContent("maior que zero");
     expect(mocks.rpc).not.toHaveBeenCalled();
+  });
+
+  it("não tenta fechar novamente uma data já confirmada", () => {
+    renderFechamentos("administrador", {
+      fechamento: {
+        id: "fechamento-teste",
+        status: "confirmado",
+        confirmado_em: "2026-10-02T18:00:00-03:00",
+      },
+    });
+
+    expect(screen.getByRole("button", { name: "Fechamento confirmado" })).toBeDisabled();
+    expect(screen.getByRole("status")).toHaveTextContent("já confirmado");
+    expect(mocks.rpc).not.toHaveBeenCalled();
+  });
+
+  it("bloqueia dois cliques rápidos no fechamento diário", async () => {
+    let concluir!: (resultado: { data: string; error: null }) => void;
+    mocks.rpc.mockReturnValueOnce(
+      new Promise<{ data: string; error: null }>((resolve) => {
+        concluir = resolve;
+      }),
+    );
+    renderFechamentos("administrador");
+    const confirmar = screen.getByRole("button", { name: "Confirmar fechamento" });
+    fireEvent.click(confirmar);
+    fireEvent.click(confirmar);
+
+    await waitFor(() => expect(mocks.rpc).toHaveBeenCalledTimes(1));
+    concluir({ data: "fechamento-teste", error: null });
+  });
+
+  it("permite fechamento contendo somente ajuste auditado", async () => {
+    mocks.rpc.mockResolvedValueOnce({ data: "fechamento-ajuste", error: null });
+    renderFechamentos("administrador", {
+      atendimentos: [],
+      ajustes: [{ id: "ajuste-teste", valor: 1 }],
+    });
+
+    expect(screen.getByText("1 · R$ 1,00")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar fechamento" }));
+    await waitFor(() =>
+      expect(mocks.rpc).toHaveBeenCalledWith("rpc_fechar_repasses_dia", {
+        p_data_operacao: expect.any(String),
+        p_atendimentos_pendentes: [],
+        p_observacoes: null,
+      }),
+    );
+  });
+
+  it("não cria fechamento vazio quando todos os atendimentos ficam pendentes", () => {
+    renderFechamentos("administrador");
+    fireEvent.click(
+      screen.getByLabelText("Deixar atendimento de Cliente de teste para outro fechamento"),
+    );
+    expect(screen.getByRole("button", { name: "Confirmar fechamento" })).toBeDisabled();
   });
 
   it("mantém a navegação do lavador sem ações administrativas", async () => {

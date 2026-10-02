@@ -145,6 +145,11 @@ operação. Como pertence ao fechamento diário, foi registrado para reproduçã
 diagnóstico e correção exclusiva na Etapa 6, evitando misturar alterações e
 commits. O erro ainda não foi reproduzido nem corrigido nesta etapa.
 
+Atualização da Etapa 6: a causa foi confirmada por inspeção e corrigida na
+migration aditiva `20261002013000_fechamento_diario_idempotente.sql`. A
+migration ainda depende de revisão e aplicação manual no Supabase Cloud; não
+foi executada automaticamente.
+
 ## Próximos passos manuais
 
 1. Revisar e integrar o commit desta etapa na branch destinada ao teste.

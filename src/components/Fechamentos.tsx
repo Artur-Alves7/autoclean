@@ -1,9 +1,10 @@
 import { Button } from "@/components/ui/button";
 import { CheckCheck, LoaderCircle, Wallet } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
 import type { Papel } from "@/lib/acesso";
+import { calcularResumoFechamento, dataLocalIso } from "@/lib/fechamento";
 import { reaisParaCentavos } from "@/lib/regras";
 import { db, formatarDinheiro, formatarDataHora, mensagemErro } from "@/lib/supabase-db";
 
@@ -27,28 +28,49 @@ type Repasse = {
 
 export function Fechamentos({ perfilId, papel }: { perfilId: string; papel: Papel }) {
   const qc = useQueryClient();
-  const hoje = new Date().toISOString().slice(0, 10);
+  const hoje = dataLocalIso();
   const [data, setData] = useState(hoje);
   const [pendentes, setPendentes] = useState<string[]>([]);
   const [mensagem, setMensagem] = useState<string | null>(null);
+  const fechandoRef = useRef(false);
 
   const atendimentos = useQuery({
     queryKey: ["atendimentos-fechamento", data],
     enabled: papel === "administrador",
     queryFn: async () => {
-      const inicio = `${data}T00:00:00`;
-      const fim = `${data}T23:59:59.999`;
-      const { data: linhas, error } = await db()
-        .from("vw_painel_atendimentos")
-        .select(
-          "id, entregue_em, nome_cliente_snapshot, veiculo_snapshot, valor_final, valor_empresa_snapshot, total_pago, lavadores",
-        )
-        .eq("status", "entregue")
-        .gte("entregue_em", inicio)
-        .lte("entregue_em", fim)
-        .order("entregue_em");
+      const { data: linhas, error } = await db().rpc("rpc_listar_atendimentos_fechamento", {
+        p_data_operacao: data,
+      });
       if (error) throw error;
       return linhas as unknown as AtendimentoFechamento[];
+    },
+  });
+
+  const fechamentoDia = useQuery({
+    queryKey: ["fechamento-diario", data],
+    enabled: papel === "administrador",
+    queryFn: async () => {
+      const { data: linha, error } = await db()
+        .from("fechamentos_diarios")
+        .select("id, status, confirmado_em")
+        .eq("data_operacao", data)
+        .maybeSingle();
+      if (error) throw error;
+      return linha as { id: string; status: string; confirmado_em: string | null } | null;
+    },
+  });
+
+  const ajustesPendentes = useQuery({
+    queryKey: ["ajustes-repasse-pendentes", data],
+    enabled: papel === "administrador",
+    queryFn: async () => {
+      const { data: linhas, error } = await db()
+        .from("ajustes_repasse_pendentes")
+        .select("id, valor")
+        .is("processado_em", null)
+        .lte("criado_em", `${data}T23:59:59.999`);
+      if (error) throw error;
+      return (linhas ?? []) as { id: string; valor: number }[];
     },
   });
 
@@ -71,50 +93,51 @@ export function Fechamentos({ perfilId, papel }: { perfilId: string; papel: Pape
   });
 
   const resumo = useMemo(() => {
-    const incluidos = (atendimentos.data ?? []).filter((item) => !pendentes.includes(item.id));
-    const porLavador = new Map<string, { nome: string; valor: number }>();
-    incluidos.forEach((item) => {
-      const restanteCentavos = Math.round(
-        (Number(item.valor_final) - Number(item.valor_empresa_snapshot)) * 100,
-      );
-      const base = item.lavadores.length ? Math.floor(restanteCentavos / item.lavadores.length) : 0;
-      const sobra = item.lavadores.length ? restanteCentavos % item.lavadores.length : 0;
-      item.lavadores.forEach((lavador, indice) => {
-        const atual = porLavador.get(lavador.perfil_id) ?? { nome: lavador.nome, valor: 0 };
-        atual.valor += (base + (indice < sobra ? 1 : 0)) / 100;
-        porLavador.set(lavador.perfil_id, atual);
-      });
-    });
-    return {
-      empresa: incluidos.reduce((total, item) => total + Number(item.valor_empresa_snapshot), 0),
-      total: incluidos.reduce((total, item) => total + Number(item.valor_final), 0),
-      inconsistentes: incluidos.filter(
-        (item) =>
-          Number(item.total_pago) !== Number(item.valor_final) ||
-          item.lavadores.length === 0 ||
-          Number(item.valor_empresa_snapshot) > Number(item.valor_final),
-      ).length,
-      porLavador: [...porLavador.values()].sort((a, b) => a.nome.localeCompare(b.nome)),
-    };
+    return calcularResumoFechamento(atendimentos.data ?? [], pendentes);
   }, [atendimentos.data, pendentes]);
+
+  const totalAjustesCentavos = (ajustesPendentes.data ?? []).reduce(
+    (total, item) => total + reaisParaCentavos(Number(item.valor)),
+    0,
+  );
+  const jaConfirmado = fechamentoDia.data?.status === "confirmado";
+  const possuiRepasses = Boolean(atendimentos.data?.some((item) => !pendentes.includes(item.id)));
+  const possuiLancamentos = possuiRepasses || Boolean(ajustesPendentes.data?.length);
 
   const fechar = useMutation({
     mutationFn: async () => {
+      if (jaConfirmado) throw new Error("O fechamento desta data já foi confirmado.");
       if (resumo.inconsistentes)
         throw new Error("Corrija as pendências antes de confirmar o fechamento.");
-      const { error } = await db().rpc("rpc_fechar_repasses_dia", {
+      const { data: fechamentoId, error } = await db().rpc("rpc_fechar_repasses_dia", {
         p_data_operacao: data,
         p_atendimentos_pendentes: pendentes,
         p_observacoes: pendentes.length ? "Atendimentos deixados para fechamento posterior." : null,
       });
       if (error) throw error;
+      return fechamentoId as string;
     },
-    onSuccess: () => {
-      setMensagem("Fechamento confirmado. Os lançamentos são imutáveis.");
+    onSuccess: (fechamentoId) => {
+      qc.setQueryData(["fechamento-diario", data], {
+        id: fechamentoId,
+        status: "confirmado",
+        confirmado_em: new Date().toISOString(),
+      });
       qc.invalidateQueries({ queryKey: ["atendimentos-fechamento"] });
+      qc.invalidateQueries({ queryKey: ["ajustes-repasse-pendentes"] });
     },
     onError: (erro) => setMensagem(mensagemErro(erro)),
   });
+  const confirmarFechamento = () => {
+    if (fechandoRef.current || jaConfirmado) return;
+    fechandoRef.current = true;
+    setMensagem(null);
+    fechar.mutate(undefined, {
+      onSettled: () => {
+        fechandoRef.current = false;
+      },
+    });
+  };
   const corrigir = useMutation({
     mutationFn: async (item: AtendimentoFechamento) => {
       const valorTexto = window.prompt(
@@ -142,6 +165,7 @@ export function Fechamentos({ perfilId, papel }: { perfilId: string; papel: Pape
     onSuccess: () => {
       setMensagem("Correção registrada no histórico.");
       qc.invalidateQueries({ queryKey: ["atendimentos-fechamento"] });
+      qc.invalidateQueries({ queryKey: ["ajustes-repasse-pendentes"] });
     },
     onError: (erro) => setMensagem(mensagemErro(erro)),
   });
@@ -194,16 +218,21 @@ export function Fechamentos({ perfilId, papel }: { perfilId: string; papel: Pape
           <span className="lc-eyebrow">Financeiro</span>
           <h1 className="text-2xl font-bold tracking-tight">Fechamento diário</h1>
           <p className="text-sm text-muted-foreground">
-            Atendimentos pendentes ficam explicitamente para outro fechamento.
+            Pendências de dias anteriores são carregadas até entrarem em um fechamento.
           </p>
         </div>
         <label className="lc-label w-full sm:w-auto">
           Data do fechamento
           <input
             type="date"
+            max={hoje}
             className="lc-field"
             value={data}
-            onChange={(e) => setData(e.target.value)}
+            onChange={(e) => {
+              setData(e.target.value);
+              setPendentes([]);
+              setMensagem(null);
+            }}
           />
         </label>
       </div>
@@ -217,18 +246,42 @@ export function Fechamentos({ perfilId, papel }: { perfilId: string; papel: Pape
           {mensagemErro(atendimentos.error)}
         </p>
       )}
-      <div className="grid gap-3 sm:grid-cols-3">
+      {fechamentoDia.error && (
+        <p role="alert" className="lc-message">
+          {mensagemErro(fechamentoDia.error)}
+        </p>
+      )}
+      {ajustesPendentes.error && (
+        <p role="alert" className="lc-message">
+          {mensagemErro(ajustesPendentes.error)}
+        </p>
+      )}
+      {jaConfirmado && (
+        <p role="status" className="lc-message">
+          Fechamento desta data já confirmado. Novos atendimentos e ajustes serão considerados no
+          próximo fechamento.
+        </p>
+      )}
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <Resumo
           rotulo="Total recebido"
-          valor={atendimentos.data ? formatarDinheiro(resumo.total) : "—"}
+          valor={atendimentos.data ? formatarDinheiro(resumo.totalCentavos / 100) : "—"}
         />
         <Resumo
           rotulo="Parte da empresa"
-          valor={atendimentos.data ? formatarDinheiro(resumo.empresa) : "—"}
+          valor={atendimentos.data ? formatarDinheiro(resumo.empresaCentavos / 100) : "—"}
         />
         <Resumo
           rotulo="Pendências impeditivas"
           valor={atendimentos.data ? String(resumo.inconsistentes) : "—"}
+        />
+        <Resumo
+          rotulo="Ajustes pendentes"
+          valor={
+            ajustesPendentes.data
+              ? `${ajustesPendentes.data.length} · ${formatarDinheiro(totalAjustesCentavos / 100)}`
+              : "—"
+          }
         />
       </div>
       {!!resumo.porLavador.length && (
@@ -238,7 +291,7 @@ export function Fechamentos({ perfilId, papel }: { perfilId: string; papel: Pape
             {resumo.porLavador.map((item) => (
               <li key={item.nome} className="flex justify-between gap-3">
                 <span>{item.nome}</span>
-                <strong>{formatarDinheiro(item.valor)}</strong>
+                <strong>{formatarDinheiro(item.valorCentavos / 100)}</strong>
               </li>
             ))}
           </ul>
@@ -253,7 +306,7 @@ export function Fechamentos({ perfilId, papel }: { perfilId: string; papel: Pape
       {atendimentos.data?.length === 0 && (
         <div className="lc-empty">
           <Wallet aria-hidden="true" />
-          Nenhum atendimento entregue nesta data.
+          Nenhum atendimento elegível até esta data.
         </div>
       )}
       <ul className="space-y-3">
@@ -270,6 +323,7 @@ export function Fechamentos({ perfilId, papel }: { perfilId: string; papel: Pape
                   aria-label={`Deixar atendimento de ${item.nome_cliente_snapshot} para outro fechamento`}
                   className="mt-1"
                   checked={pendentes.includes(item.id)}
+                  disabled={jaConfirmado}
                   onChange={() =>
                     setPendentes((lista) =>
                       lista.includes(item.id)
@@ -303,9 +357,15 @@ export function Fechamentos({ perfilId, papel }: { perfilId: string; papel: Pape
         })}
       </ul>
       <Button
-        disabled={fechar.isPending || !atendimentos.data?.length}
+        disabled={
+          fechar.isPending ||
+          fechamentoDia.isLoading ||
+          ajustesPendentes.isLoading ||
+          jaConfirmado ||
+          !possuiLancamentos
+        }
         aria-busy={fechar.isPending}
-        onClick={() => fechar.mutate()}
+        onClick={confirmarFechamento}
         className="w-full sm:w-fit"
       >
         {fechar.isPending ? (
@@ -313,7 +373,11 @@ export function Fechamentos({ perfilId, papel }: { perfilId: string; papel: Pape
         ) : (
           <CheckCheck aria-hidden="true" />
         )}
-        {fechar.isPending ? "Confirmando..." : "Confirmar fechamento"}
+        {fechar.isPending
+          ? "Confirmando..."
+          : jaConfirmado
+            ? "Fechamento confirmado"
+            : "Confirmar fechamento"}
       </Button>
       {mensagem && (
         <p role="status" className="lc-message">
