@@ -1,6 +1,5 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
-import { AreaLayout } from "@/components/AreaLayout";
-import { FilaAtendimentos } from "@/components/Atendimentos";
+import { PainelSistema } from "@/components/PainelSistema";
 
 export const Route = createFileRoute("/_authenticated/lavador")({
   beforeLoad: ({ context }) => {
@@ -21,9 +20,5 @@ export const Route = createFileRoute("/_authenticated/lavador")({
 
 function Lavador() {
   const { acesso } = Route.useRouteContext();
-  return (
-    <AreaLayout titulo="Área do lavador" nome={acesso.nome}>
-      <FilaAtendimentos perfilId={acesso.perfilId} />
-    </AreaLayout>
-  );
+  return <PainelSistema perfilId={acesso.perfilId} papel={acesso.papel} nome={acesso.nome} />;
 }
