@@ -55,6 +55,7 @@ const filaTeste = [
     id: "atendimento-teste",
     status: "pronto_para_retirada",
     chegou_em: "2026-10-02T08:30:00-03:00",
+    agendado_para: null,
     valor_final: 100,
     nome_cliente_snapshot: "Cliente de teste",
     veiculo_snapshot: "Veículo de teste",
@@ -191,7 +192,44 @@ describe("interface operacional", () => {
     for (const etapa of ["Aguardando", "Em lavagem", "Pronto para retirada", "Concluídos"]) {
       expect(screen.getByRole("heading", { name: etapa })).toBeInTheDocument();
     }
-    expect(screen.getByLabelText("Selecionar data da operação")).toBeInTheDocument();
+    expect(screen.getByLabelText("Selecionar data da operação")).not.toHaveAttribute("max");
+    expect(screen.getByRole("button", { name: "Próximo dia" })).toBeEnabled();
+  });
+
+  it("diferencia agendamentos futuros na fila", () => {
+    renderFila([
+      {
+        ...filaTeste[0]!,
+        status: "aguardando",
+        chegou_em: "2099-10-05T14:30:00-03:00",
+        agendado_para: "2099-10-05T14:30:00-03:00",
+      },
+    ]);
+
+    expect(screen.getByText("Agendamento")).toBeInTheDocument();
+    expect(screen.getByText("Agendado para")).toBeInTheDocument();
+  });
+
+  it("permite escolher horários futuros e passados no novo atendimento", () => {
+    renderFila([]);
+    fireEvent.click(screen.getByRole("button", { name: "Novo atendimento" }));
+    fireEvent.click(screen.getByLabelText("Escolher data e horário"));
+
+    const campo = screen.getByLabelText("Data e horário do atendimento");
+    expect(campo).not.toHaveAttribute("min");
+    expect(campo).not.toHaveAttribute("max");
+
+    fireEvent.change(campo, { target: { value: "2099-10-05T14:30" } });
+    expect(screen.getByRole("button", { name: "Criar agendamento" })).toBeInTheDocument();
+    expect(screen.getByText("Será salvo como agendamento futuro.")).toBeInTheDocument();
+
+    fireEvent.change(campo, { target: { value: "2020-01-02T08:15" } });
+    expect(
+      screen.getByRole("button", { name: "Registrar atendimento retroativo" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Será registrado no histórico como atendimento retroativo."),
+    ).toBeInTheDocument();
   });
 
   it("carrega os clientes cadastrados em ordem alfabética sem exigir busca", async () => {

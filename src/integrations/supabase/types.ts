@@ -55,6 +55,7 @@ export type Database = {
       }
       atendimentos: {
         Row: {
+          agendado_para: string | null
           atualizado_em: string
           cancelado_em: string | null
           categoria_veiculo_snapshot: string
@@ -78,6 +79,7 @@ export type Database = {
           veiculo_snapshot: string
         }
         Insert: {
+          agendado_para?: string | null
           atualizado_em?: string
           cancelado_em?: string | null
           categoria_veiculo_snapshot: string
@@ -101,6 +103,7 @@ export type Database = {
           veiculo_snapshot: string
         }
         Update: {
+          agendado_para?: string | null
           atualizado_em?: string
           cancelado_em?: string | null
           categoria_veiculo_snapshot?: string

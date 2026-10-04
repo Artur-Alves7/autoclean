@@ -24,6 +24,7 @@ type EntradaNovoAtendimento = {
   valorDepois: boolean;
   valor: string;
   observacoes: string;
+  momentoOperacao?: string | null;
 };
 
 export function prepararBuscaCliente(valor: string) {
@@ -71,5 +72,18 @@ export function montarParametrosNovoAtendimento(entrada: EntradaNovoAtendimento)
       : null,
     p_valor_final: valorFinal,
     p_observacoes: entrada.observacoes.trim() || null,
+    p_momento_operacao: entrada.momentoOperacao || null,
   };
+}
+
+export function momentoLocalParaIso(valor: string) {
+  if (!valor) throw new Error("Informe a data e o horário.");
+  const data = new Date(valor);
+  if (Number.isNaN(data.getTime())) throw new Error("Data ou horário inválido.");
+  return data.toISOString();
+}
+
+export function dataHoraLocalInput(data = new Date()) {
+  const local = new Date(data.getTime() - data.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 16);
 }

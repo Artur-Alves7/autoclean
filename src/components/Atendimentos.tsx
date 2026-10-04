@@ -1,5 +1,6 @@
 import {
   ArrowRight,
+  CalendarClock,
   CalendarDays,
   CarFront,
   CheckCheck,
@@ -20,7 +21,12 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { z } from "zod";
 
 import type { Papel } from "@/lib/acesso";
-import { montarParametrosNovoAtendimento, prepararBuscaCliente } from "@/lib/atendimento";
+import {
+  dataHoraLocalInput,
+  momentoLocalParaIso,
+  montarParametrosNovoAtendimento,
+  prepararBuscaCliente,
+} from "@/lib/atendimento";
 import { dataLocalIso, deslocarDataLocal, intervaloDataLocal } from "@/lib/fechamento";
 import {
   proximoStatus,
@@ -52,6 +58,7 @@ type ItemFila = {
   id: string;
   status: StatusAtendimento;
   chegou_em: string;
+  agendado_para: string | null;
   valor_final: number | null;
   nome_cliente_snapshot: string;
   veiculo_snapshot: string;
@@ -86,7 +93,7 @@ export function FilaAtendimentos({ perfilId, papel }: { perfilId: string; papel:
       const { data, error } = await db()
         .from("vw_painel_atendimentos")
         .select(
-          "id, status, chegou_em, valor_final, nome_cliente_snapshot, veiculo_snapshot, categoria_veiculo_snapshot, servico_snapshot, lavadores",
+          "id, status, chegou_em, agendado_para, valor_final, nome_cliente_snapshot, veiculo_snapshot, categoria_veiculo_snapshot, servico_snapshot, lavadores",
         )
         .gte("chegou_em", intervalo.inicio)
         .lt("chegou_em", intervalo.fim)
@@ -119,7 +126,15 @@ export function FilaAtendimentos({ perfilId, papel }: { perfilId: string; papel:
           </Button>
         )}
       </div>
-      {abrirForm && <NovoAtendimento perfilId={perfilId} onFechar={() => setAbrirForm(false)} />}
+      {abrirForm && (
+        <NovoAtendimento
+          perfilId={perfilId}
+          onFechar={(dataDestino) => {
+            setAbrirForm(false);
+            if (dataDestino) setData(dataDestino);
+          }}
+        />
+      )}
       <div className="lc-panel flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="lc-eyebrow">Dia da operação</p>
@@ -148,7 +163,6 @@ export function FilaAtendimentos({ perfilId, papel }: { perfilId: string; papel:
             <input
               type="date"
               className="lc-field"
-              max={hoje}
               value={data}
               onChange={(evento) => setData(evento.target.value || hoje)}
             />
@@ -158,7 +172,6 @@ export function FilaAtendimentos({ perfilId, papel }: { perfilId: string; papel:
             variant="outline"
             size="icon"
             aria-label="Próximo dia"
-            disabled={data >= hoje}
             onClick={() => setData((atual) => deslocarDataLocal(atual, 1))}
           >
             <ChevronRight aria-hidden="true" />
@@ -302,7 +315,15 @@ function CartaoAtendimento({
             </p>
           </div>
         </div>
-        <StatusBadge status={item.status} />
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {item.agendado_para && item.status === "aguardando" && (
+            <span className="inline-flex items-center gap-1 rounded-full border border-primary/20 bg-accent px-2.5 py-1 text-xs font-semibold text-primary">
+              <CalendarClock className="size-3.5" aria-hidden="true" />
+              Agendamento
+            </span>
+          )}
+          <StatusBadge status={item.status} />
+        </div>
       </div>
       <dl className="my-4 grid grid-cols-2 gap-x-4 gap-y-4 text-sm lg:grid-cols-4">
         <div>
@@ -310,7 +331,9 @@ function CartaoAtendimento({
           <dd className="font-medium">{item.servico_snapshot}</dd>
         </div>
         <div>
-          <dt className="mb-1 text-xs text-muted-foreground">Chegada</dt>
+          <dt className="mb-1 text-xs text-muted-foreground">
+            {item.agendado_para ? "Agendado para" : "Chegada"}
+          </dt>
           <dd className="font-medium">{formatarDataHora(item.chegou_em)}</dd>
         </div>
         <div>
@@ -379,7 +402,13 @@ const veiculoSchema = z.object({
   observacoes: z.string().trim().max(500),
 });
 
-function NovoAtendimento({ perfilId, onFechar }: { perfilId: string; onFechar: () => void }) {
+function NovoAtendimento({
+  perfilId,
+  onFechar,
+}: {
+  perfilId: string;
+  onFechar: (dataDestino?: string) => void;
+}) {
   const qc = useQueryClient();
   const [busca, setBusca] = useState("");
   const [buscaDeb, setBuscaDeb] = useState("");
@@ -401,6 +430,8 @@ function NovoAtendimento({ perfilId, onFechar }: { perfilId: string; onFechar: (
   const [valorDepois, setValorDepois] = useState(true);
   const [valor, setValor] = useState("");
   const [observacoes, setObservacoes] = useState("");
+  const [tipoHorario, setTipoHorario] = useState<"agora" | "personalizado">("agora");
+  const [dataHora, setDataHora] = useState(() => dataHoraLocalInput());
   const [erro, setErro] = useState<string | null>(null);
   const enviando = useRef(false);
   void perfilId;
@@ -505,13 +536,14 @@ function NovoAtendimento({ perfilId, onFechar }: { perfilId: string; onFechar: (
         valorDepois,
         valor,
         observacoes,
+        momentoOperacao: tipoHorario === "personalizado" ? momentoLocalParaIso(dataHora) : null,
       });
       const { error } = await db().rpc("rpc_criar_atendimento", parametros);
       if (error) throw error;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["fila-atendimentos"] });
-      onFechar();
+      onFechar(tipoHorario === "personalizado" ? dataHora.slice(0, 10) : dataLocalIso());
     },
     onError: (e) =>
       setErro(
@@ -533,6 +565,16 @@ function NovoAtendimento({ perfilId, onFechar }: { perfilId: string; onFechar: (
   }
   const alternarLavador = (id: string) =>
     setLavadores((lista) => (lista.includes(id) ? lista.filter((x) => x !== id) : [...lista, id]));
+  const momentoEscolhido = tipoHorario === "personalizado" ? new Date(dataHora) : null;
+  const horarioFuturo = Boolean(
+    momentoEscolhido && !Number.isNaN(momentoEscolhido.getTime()) && momentoEscolhido > new Date(),
+  );
+  const textoAcao =
+    tipoHorario === "agora"
+      ? "Registrar chegada"
+      : horarioFuturo
+        ? "Criar agendamento"
+        : "Registrar atendimento retroativo";
 
   return (
     <form
@@ -542,23 +584,67 @@ function NovoAtendimento({ perfilId, onFechar }: { perfilId: string; onFechar: (
     >
       <div className="flex justify-between">
         <div>
-          <h2 className="text-lg font-semibold">Novo atendimento</h2>
+          <h2 className="text-lg font-semibold">Novo atendimento ou agendamento</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Registre a chegada e organize a equipe.
+            Registre agora ou escolha qualquer data e horário.
           </p>
         </div>
         <Button
           variant="outline"
           type="button"
           className="text-sm text-muted-foreground"
-          onClick={onFechar}
+          onClick={() => onFechar()}
         >
           Fechar
         </Button>
       </div>
       <fieldset className="lc-form-section space-y-3">
         <legend>
-          <span className="lc-step">01</span>Cliente
+          <span className="lc-step">01</span>Data e horário
+        </legend>
+        <div className="grid gap-2 sm:grid-cols-2">
+          <label className="lc-choice">
+            <input
+              type="radio"
+              name="tipo-horario"
+              checked={tipoHorario === "agora"}
+              onChange={() => setTipoHorario("agora")}
+            />
+            Atendimento agora
+          </label>
+          <label className="lc-choice">
+            <input
+              type="radio"
+              name="tipo-horario"
+              checked={tipoHorario === "personalizado"}
+              onChange={() => setTipoHorario("personalizado")}
+            />
+            Escolher data e horário
+          </label>
+        </div>
+        {tipoHorario === "personalizado" && (
+          <div className="rounded-xl border bg-muted/40 p-4">
+            <label className={rotulo}>
+              Data e horário do atendimento
+              <input
+                className={campo}
+                type="datetime-local"
+                value={dataHora}
+                onChange={(evento) => setDataHora(evento.target.value)}
+              />
+            </label>
+            <p className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
+              <CalendarClock className="size-3.5" aria-hidden="true" />
+              {horarioFuturo
+                ? "Será salvo como agendamento futuro."
+                : "Será registrado no histórico como atendimento retroativo."}
+            </p>
+          </div>
+        )}
+      </fieldset>
+      <fieldset className="lc-form-section space-y-3">
+        <legend>
+          <span className="lc-step">02</span>Cliente
         </legend>
         {cliente ? (
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-accent p-3 text-sm">
@@ -665,7 +751,7 @@ function NovoAtendimento({ perfilId, onFechar }: { perfilId: string; onFechar: (
       {(cliente || novoCliente) && (
         <fieldset className="lc-form-section space-y-3">
           <legend>
-            <span className="lc-step">02</span>Veículo
+            <span className="lc-step">03</span>Veículo
           </legend>
           {veiculos.isFetching && (
             <p role="status" className="text-sm text-muted-foreground">
@@ -760,7 +846,7 @@ function NovoAtendimento({ perfilId, onFechar }: { perfilId: string; onFechar: (
       )}
       <fieldset className="lc-form-section">
         <legend>
-          <span className="lc-step">03</span>Serviço e equipe
+          <span className="lc-step">04</span>Serviço e equipe
         </legend>
         {auxiliares.isLoading && (
           <p role="status" className="mb-3 text-sm text-muted-foreground">
@@ -807,7 +893,7 @@ function NovoAtendimento({ perfilId, onFechar }: { perfilId: string; onFechar: (
       </fieldset>
       <fieldset className="lc-form-section space-y-4">
         <legend>
-          <span className="lc-step">04</span>Valor e observações
+          <span className="lc-step">05</span>Valor e observações
         </legend>
         <label className="lc-choice">
           <input
@@ -857,7 +943,7 @@ function NovoAtendimento({ perfilId, onFechar }: { perfilId: string; onFechar: (
         ) : (
           <Plus aria-hidden="true" />
         )}
-        {salvar.isPending ? "Registrando..." : "Registrar chegada"}
+        {salvar.isPending ? "Registrando..." : textoAcao}
       </Button>
     </form>
   );

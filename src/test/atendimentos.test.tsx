@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { montarParametrosNovoAtendimento, prepararBuscaCliente } from "@/lib/atendimento";
+import {
+  dataHoraLocalInput,
+  momentoLocalParaIso,
+  montarParametrosNovoAtendimento,
+  prepararBuscaCliente,
+} from "@/lib/atendimento";
 import { montarPayloadNovoVeiculo } from "@/lib/veiculo";
 
 describe("cadastro de veículo", () => {
@@ -74,6 +79,7 @@ describe("payload do novo atendimento", () => {
       },
       p_valor_final: null,
       p_observacoes: null,
+      p_momento_operacao: null,
     });
     expect(parametros.p_veiculo).not.toHaveProperty("placa_normalizada");
   });
@@ -109,6 +115,25 @@ describe("payload do novo atendimento", () => {
     expect(parametros.p_cliente).toBeNull();
     expect(parametros.p_veiculo_id).toBe("veiculo-existente");
     expect(parametros.p_veiculo).toBeNull();
+  });
+
+  it("envia ao banco o momento personalizado em formato ISO", () => {
+    const momento = momentoLocalParaIso("2026-10-05T14:30");
+    const parametros = montarParametrosNovoAtendimento({
+      ...base,
+      momentoOperacao: momento,
+    });
+
+    expect(parametros.p_momento_operacao).toBe(new Date("2026-10-05T14:30").toISOString());
+  });
+
+  it("formata a data local para o campo de data e horário", () => {
+    expect(dataHoraLocalInput(new Date(2026, 9, 5, 14, 30))).toBe("2026-10-05T14:30");
+  });
+
+  it("rejeita data ou horário personalizado inválido", () => {
+    expect(() => momentoLocalParaIso("")).toThrow("Informe a data e o horário.");
+    expect(() => momentoLocalParaIso("data-inválida")).toThrow("Data ou horário inválido.");
   });
 });
 
