@@ -32,7 +32,7 @@ export function AreaLayout({
   }
 
   return (
-    <div className="lc-workspace min-h-screen bg-background lg:grid lg:grid-cols-[232px_minmax(0,1fr)]">
+    <div className="lc-workspace min-h-screen bg-background lg:grid lg:grid-cols-[248px_minmax(0,1fr)] 2xl:grid-cols-[272px_minmax(0,1fr)]">
       <a href="#conteudo-principal" className="lc-skip">
         Pular para o conteúdo
       </a>
@@ -56,7 +56,7 @@ export function AreaLayout({
         </div>
       </aside>
       <div className="min-w-0">
-        <header className="flex min-h-20 items-center justify-between gap-3 border-b bg-card px-4 sm:px-7 lg:px-9">
+        <header className="sticky top-0 z-30 flex min-h-16 items-center justify-between gap-3 border-b bg-card/95 px-4 backdrop-blur sm:min-h-20 sm:px-7 lg:px-8 xl:px-10">
           <div className="flex min-w-0 items-center gap-3">
             <LogoAutoClean className="size-12 shrink-0 rounded-lg object-contain lg:hidden" />
             <div>
@@ -82,7 +82,7 @@ export function AreaLayout({
             </Button>
           </div>
         </header>
-        <div className="px-4 pt-4 sm:px-7 lg:hidden">
+        <div className="px-3 pt-3 sm:px-6 sm:pt-4 lg:hidden">
           <details className="lc-sidebar lc-mobile-nav">
             <summary>
               <Menu className="size-4" aria-hidden="true" />
@@ -95,7 +95,7 @@ export function AreaLayout({
         <main
           id="conteudo-principal"
           tabIndex={-1}
-          className="mx-auto max-w-[1440px] p-4 pb-10 sm:p-7 lg:p-9"
+          className="mx-auto w-full max-w-[1600px] p-3 pb-10 sm:p-6 lg:p-8 xl:p-10"
         >
           {children}
         </main>

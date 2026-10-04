@@ -19,6 +19,18 @@ export function dataLocalIso(data = new Date()) {
   return new Date(data.getTime() - deslocamento).toISOString().slice(0, 10);
 }
 
+export function deslocarDataLocal(data: string, dias: number) {
+  const [ano, mes, dia] = data.split("-").map(Number);
+  return dataLocalIso(new Date(ano!, mes! - 1, dia! + dias));
+}
+
+export function intervaloDataLocal(data: string) {
+  const [ano, mes, dia] = data.split("-").map(Number);
+  const inicio = new Date(ano!, mes! - 1, dia!);
+  const fim = new Date(ano!, mes! - 1, dia! + 1);
+  return { inicio: inicio.toISOString(), fim: fim.toISOString() };
+}
+
 export function calcularResumoFechamento(
   atendimentos: readonly AtendimentoParaFechamento[],
   pendentes: readonly string[],

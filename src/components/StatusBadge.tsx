@@ -5,7 +5,7 @@ const statusVisual = {
   aguardando: { rotulo: "Aguardando", icone: Clock3 },
   em_lavagem: { rotulo: "Em lavagem", icone: Droplets },
   pronto_para_retirada: { rotulo: "Pronto para retirada", icone: CircleCheck },
-  entregue: { rotulo: "Entregue", icone: Check },
+  entregue: { rotulo: "Concluído", icone: Check },
   cancelado: { rotulo: "Cancelado", icone: X },
 } satisfies Record<StatusAtendimento, { rotulo: string; icone: typeof Check }>;
 

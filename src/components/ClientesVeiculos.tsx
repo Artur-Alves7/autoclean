@@ -34,17 +34,17 @@ export function ClientesVeiculos({ papel }: { papel: Papel }) {
 
   const clientes = useQuery({
     queryKey: ["clientes", busca],
-    enabled: busca.trim().length >= 2,
     queryFn: async () => {
       const termo = busca.trim().replace(/[%,()]/g, "");
       const placa = termo.toUpperCase().replace(/[^A-Z0-9]/g, "");
+      const consultaClientes = db()
+        .from("clientes")
+        .select("id, nome_completo, telefone, observacoes, ativo")
+        .order("nome_completo");
       const [porCliente, porPlaca] = await Promise.all([
-        db()
-          .from("clientes")
-          .select("id, nome_completo, telefone, observacoes, ativo")
-          .or(`nome_completo.ilike.%${termo}%,telefone.ilike.%${termo}%`)
-          .order("nome_completo")
-          .limit(20),
+        termo
+          ? consultaClientes.or(`nome_completo.ilike.%${termo}%,telefone.ilike.%${termo}%`)
+          : consultaClientes,
         placa.length >= 3
           ? db()
               .from("veiculos")
@@ -62,7 +62,9 @@ export function ClientesVeiculos({ papel }: { papel: Papel }) {
           if (cliente) mapa.set(cliente.id, cliente);
         },
       );
-      return [...mapa.values()];
+      return [...mapa.values()].sort((a, b) =>
+        a.nome_completo.localeCompare(b.nome_completo, "pt-BR"),
+      );
     },
   });
 
@@ -75,7 +77,8 @@ export function ClientesVeiculos({ papel }: { papel: Papel }) {
           .from("veiculos")
           .select("id, marca, modelo, placa, cor, observacoes, ativo, categorias_veiculo(nome)")
           .eq("cliente_id", selecionado!.id)
-          .order("criado_em", { ascending: false }),
+          .order("marca")
+          .order("modelo"),
         db()
           .from("vw_painel_atendimentos")
           .select(
@@ -120,7 +123,9 @@ export function ClientesVeiculos({ papel }: { papel: Papel }) {
         <div>
           <span className="lc-eyebrow">Relacionamento</span>
           <h1 className="text-2xl font-bold tracking-tight">Clientes e veículos</h1>
-          <p className="text-sm text-muted-foreground">Pesquise por nome, telefone ou placa.</p>
+          <p className="text-sm text-muted-foreground">
+            Consulte todos os cadastros em ordem alfabética ou filtre por nome, telefone ou placa.
+          </p>
         </div>
       </div>
       <label className="lc-label">
@@ -138,36 +143,40 @@ export function ClientesVeiculos({ papel }: { papel: Papel }) {
           />
         </div>
       </label>
-      {clientes.isFetching && <p className="text-sm text-muted-foreground">Buscando...</p>}
+      {clientes.isFetching && (
+        <p className="text-sm text-muted-foreground">Carregando clientes...</p>
+      )}
       {clientes.error && <p className="text-sm text-destructive">{mensagemErro(clientes.error)}</p>}
-      {busca.trim().length < 2 && (
-        <div className="lc-empty">
-          <Search aria-hidden="true" />
-          <p className="font-medium text-foreground">Encontre seu cliente</p>
-          <p className="mt-1">Digite pelo menos 2 caracteres para começar.</p>
+      {clientes.data?.length === 0 && (
+        <p className="lc-empty">
+          {busca.trim()
+            ? "Nenhum cliente encontrado para esta busca."
+            : "Nenhum cliente cadastrado."}
+        </p>
+      )}
+      <div className="grid items-start gap-5 lg:grid-cols-[minmax(260px,0.85fr)_minmax(0,2fr)]">
+        <div className="min-w-0">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            {clientes.data?.length ?? 0} cliente(s)
+          </p>
+          <ul className="max-h-[68dvh] divide-y overflow-y-auto rounded-xl border bg-card empty:hidden">
+            {clientes.data?.map((cliente) => (
+              <li key={cliente.id}>
+                <Button
+                  variant="outline"
+                  className={`!block w-full !rounded-none !border-0 !px-4 !py-4 text-left !shadow-none ${selecionado?.id === cliente.id ? "bg-accent" : ""}`}
+                  aria-pressed={selecionado?.id === cliente.id}
+                  onClick={() => setSelecionado(cliente)}
+                  type="button"
+                >
+                  <span className="block font-medium">{cliente.nome_completo}</span>
+                  <span className="text-sm text-muted-foreground">{cliente.telefone}</span>
+                  {!cliente.ativo && <span className="ml-2 text-xs text-destructive">Inativo</span>}
+                </Button>
+              </li>
+            ))}
+          </ul>
         </div>
-      )}
-      {clientes.data?.length === 0 && busca.trim().length >= 2 && (
-        <p className="lc-empty">Nenhum cliente encontrado para esta busca.</p>
-      )}
-      <div className="grid items-start gap-5 xl:grid-cols-[minmax(240px,1fr)_2fr]">
-        <ul className="divide-y overflow-hidden rounded-xl border bg-card empty:hidden">
-          {clientes.data?.map((cliente) => (
-            <li key={cliente.id}>
-              <Button
-                variant="outline"
-                className={`!block w-full !rounded-none !border-0 !px-4 !py-4 text-left !shadow-none ${selecionado?.id === cliente.id ? "bg-accent" : ""}`}
-                aria-pressed={selecionado?.id === cliente.id}
-                onClick={() => setSelecionado(cliente)}
-                type="button"
-              >
-                <span className="block font-medium">{cliente.nome_completo}</span>
-                <span className="text-sm text-muted-foreground">{cliente.telefone}</span>
-                {!cliente.ativo && <span className="ml-2 text-xs text-destructive">Inativo</span>}
-              </Button>
-            </li>
-          ))}
-        </ul>
 
         {selecionado && (
           <div className="lc-panel space-y-6">
@@ -334,6 +343,12 @@ export function ClientesVeiculos({ papel }: { papel: Papel }) {
                 )}
               </ul>
             </div>
+          </div>
+        )}
+        {!selecionado && !!clientes.data?.length && (
+          <div className="lc-empty hidden lg:block">
+            <UsersRound aria-hidden="true" />
+            Selecione um cliente para consultar seus veículos e atendimentos.
           </div>
         )}
       </div>
