@@ -14,6 +14,91 @@ export type Database = {
   }
   public: {
     Tables: {
+      ajustes_repasse_pendentes: {
+        Row: {
+          atendimento_id: string
+          criado_em: string
+          criado_por_perfil_id: string
+          fechamento_destino_id: string | null
+          id: string
+          item_origem_id: string | null
+          motivo: string
+          perfil_destinatario_id: string | null
+          processado_em: string | null
+          tipo_destinatario: Database["public"]["Enums"]["tipo_destinatario"]
+          valor: number
+        }
+        Insert: {
+          atendimento_id: string
+          criado_em?: string
+          criado_por_perfil_id: string
+          fechamento_destino_id?: string | null
+          id?: string
+          item_origem_id?: string | null
+          motivo: string
+          perfil_destinatario_id?: string | null
+          processado_em?: string | null
+          tipo_destinatario: Database["public"]["Enums"]["tipo_destinatario"]
+          valor: number
+        }
+        Update: {
+          atendimento_id?: string
+          criado_em?: string
+          criado_por_perfil_id?: string
+          fechamento_destino_id?: string | null
+          id?: string
+          item_origem_id?: string | null
+          motivo?: string
+          perfil_destinatario_id?: string | null
+          processado_em?: string | null
+          tipo_destinatario?: Database["public"]["Enums"]["tipo_destinatario"]
+          valor?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ajustes_repasse_pendentes_atendimento_id_fkey"
+            columns: ["atendimento_id"]
+            isOneToOne: false
+            referencedRelation: "atendimentos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ajustes_repasse_pendentes_atendimento_id_fkey"
+            columns: ["atendimento_id"]
+            isOneToOne: false
+            referencedRelation: "vw_painel_atendimentos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ajustes_repasse_pendentes_criado_por_perfil_id_fkey"
+            columns: ["criado_por_perfil_id"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ajustes_repasse_pendentes_fechamento_destino_id_fkey"
+            columns: ["fechamento_destino_id"]
+            isOneToOne: false
+            referencedRelation: "fechamentos_diarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ajustes_repasse_pendentes_item_origem_id_fkey"
+            columns: ["item_origem_id"]
+            isOneToOne: false
+            referencedRelation: "itens_fechamento"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ajustes_repasse_pendentes_perfil_destinatario_id_fkey"
+            columns: ["perfil_destinatario_id"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       atendimento_lavadores: {
         Row: {
           atendimento_id: string
@@ -42,6 +127,13 @@ export type Database = {
             columns: ["atendimento_id"]
             isOneToOne: false
             referencedRelation: "atendimentos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "atendimento_lavadores_atendimento_id_fkey"
+            columns: ["atendimento_id"]
+            isOneToOne: false
+            referencedRelation: "vw_painel_atendimentos"
             referencedColumns: ["id"]
           },
           {
@@ -308,6 +400,13 @@ export type Database = {
             referencedRelation: "atendimentos"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "historico_alteracoes_atendimento_id_fkey"
+            columns: ["atendimento_id"]
+            isOneToOne: false
+            referencedRelation: "vw_painel_atendimentos"
+            referencedColumns: ["id"]
+          },
         ]
       }
       historico_status: {
@@ -359,6 +458,13 @@ export type Database = {
             referencedRelation: "atendimentos"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "historico_status_atendimento_id_fkey"
+            columns: ["atendimento_id"]
+            isOneToOne: false
+            referencedRelation: "vw_painel_atendimentos"
+            referencedColumns: ["id"]
+          },
         ]
       }
       itens_fechamento: {
@@ -401,6 +507,13 @@ export type Database = {
             columns: ["atendimento_id"]
             isOneToOne: false
             referencedRelation: "atendimentos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "itens_fechamento_atendimento_id_fkey"
+            columns: ["atendimento_id"]
+            isOneToOne: false
+            referencedRelation: "vw_painel_atendimentos"
             referencedColumns: ["id"]
           },
           {
@@ -460,6 +573,13 @@ export type Database = {
             columns: ["atendimento_id"]
             isOneToOne: false
             referencedRelation: "atendimentos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pagamentos_atendimento_id_fkey"
+            columns: ["atendimento_id"]
+            isOneToOne: false
+            referencedRelation: "vw_painel_atendimentos"
             referencedColumns: ["id"]
           },
           {
@@ -616,9 +736,137 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      vw_painel_atendimentos: {
+        Row: {
+          agendado_para: string | null
+          cancelado_em: string | null
+          categoria_veiculo_snapshot: string | null
+          chegou_em: string | null
+          cliente_id: string | null
+          entregue_em: string | null
+          id: string | null
+          lavadores: Json | null
+          lavagem_iniciada_em: string | null
+          motivo_cancelamento: string | null
+          nome_cliente_snapshot: string | null
+          observacoes: string | null
+          pagamentos: Json | null
+          pronto_em: string | null
+          servico_id: string | null
+          servico_snapshot: string | null
+          status: Database["public"]["Enums"]["status_atendimento"] | null
+          total_pago: number | null
+          valor_empresa_snapshot: number | null
+          valor_final: number | null
+          veiculo_id: string | null
+          veiculo_snapshot: string | null
+        }
+        Insert: {
+          agendado_para?: string | null
+          cancelado_em?: string | null
+          categoria_veiculo_snapshot?: string | null
+          chegou_em?: string | null
+          cliente_id?: string | null
+          entregue_em?: string | null
+          id?: string | null
+          lavadores?: never
+          lavagem_iniciada_em?: string | null
+          motivo_cancelamento?: string | null
+          nome_cliente_snapshot?: string | null
+          observacoes?: string | null
+          pagamentos?: never
+          pronto_em?: string | null
+          servico_id?: string | null
+          servico_snapshot?: string | null
+          status?: Database["public"]["Enums"]["status_atendimento"] | null
+          total_pago?: never
+          valor_empresa_snapshot?: number | null
+          valor_final?: number | null
+          veiculo_id?: string | null
+          veiculo_snapshot?: string | null
+        }
+        Update: {
+          agendado_para?: string | null
+          cancelado_em?: string | null
+          categoria_veiculo_snapshot?: string | null
+          chegou_em?: string | null
+          cliente_id?: string | null
+          entregue_em?: string | null
+          id?: string | null
+          lavadores?: never
+          lavagem_iniciada_em?: string | null
+          motivo_cancelamento?: string | null
+          nome_cliente_snapshot?: string | null
+          observacoes?: string | null
+          pagamentos?: never
+          pronto_em?: string | null
+          servico_id?: string | null
+          servico_snapshot?: string | null
+          status?: Database["public"]["Enums"]["status_atendimento"] | null
+          total_pago?: never
+          valor_empresa_snapshot?: number | null
+          valor_final?: number | null
+          veiculo_id?: string | null
+          veiculo_snapshot?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "atendimentos_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "clientes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "atendimentos_servico_id_fkey"
+            columns: ["servico_id"]
+            isOneToOne: false
+            referencedRelation: "servicos_lavagem"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fk_atendimentos_veiculo_cliente"
+            columns: ["veiculo_id", "cliente_id"]
+            isOneToOne: false
+            referencedRelation: "veiculos"
+            referencedColumns: ["id", "cliente_id"]
+          },
+        ]
+      }
     }
     Functions: {
+      atendimento_esta_aberto: {
+        Args: { p_atendimento_id: string }
+        Returns: boolean
+      }
+      fn_calcular_repasse: {
+        Args: { p_atendimento_id: string }
+        Returns: {
+          ordem_rateio: number
+          perfil_destinatario_id: string
+          tipo_destinatario: Database["public"]["Enums"]["tipo_destinatario"]
+          valor_centavos: number
+        }[]
+      }
+      lc_criar_atendimento_base: {
+        Args: {
+          p_cliente?: Json
+          p_cliente_id?: string
+          p_lavadores: string[]
+          p_observacoes?: string
+          p_servico_id: string
+          p_valor_final?: number
+          p_veiculo?: Json
+          p_veiculo_id?: string
+        }
+        Returns: string
+      }
+      lc_perfil_atual_id: { Args: never; Returns: string }
+      lc_pode_ver_atendimento: {
+        Args: { p_atendimento_id: string }
+        Returns: boolean
+      }
+      lc_usuario_eh_admin: { Args: never; Returns: boolean }
       perfil_atual_id: { Args: never; Returns: string }
       perfil_tem_papel: {
         Args: {
@@ -626,6 +874,118 @@ export type Database = {
           p_perfil_id: string
         }
         Returns: boolean
+      }
+      rpc_adicionar_veiculo_cliente: {
+        Args: {
+          p_categoria_veiculo_id: string
+          p_cliente_id: string
+          p_cor?: string
+          p_marca: string
+          p_modelo: string
+          p_placa?: string
+        }
+        Returns: string
+      }
+      rpc_atualizar_perfil_usuario: {
+        Args: {
+          p_ativo: boolean
+          p_papel: Database["public"]["Enums"]["papel_usuario"]
+          p_perfil_id: string
+        }
+        Returns: undefined
+      }
+      rpc_avancar_atendimento: {
+        Args: {
+          p_atendimento_id: string
+          p_motivo?: string
+          p_novo_status: Database["public"]["Enums"]["status_atendimento"]
+          p_pagamentos?: Json
+          p_valor_final?: number
+        }
+        Returns: undefined
+      }
+      rpc_corrigir_atendimento_entregue: {
+        Args: {
+          p_atendimento_id: string
+          p_motivo: string
+          p_pagamentos: Json
+          p_valor_final: number
+        }
+        Returns: undefined
+      }
+      rpc_criar_atendimento: {
+        Args: {
+          p_cliente?: Json
+          p_cliente_id?: string
+          p_lavadores: string[]
+          p_momento_operacao?: string
+          p_observacoes?: string
+          p_servico_id: string
+          p_valor_final?: number
+          p_veiculo?: Json
+          p_veiculo_id?: string
+        }
+        Returns: string
+      }
+      rpc_definir_participantes: {
+        Args: { p_atendimento_id: string; p_lavadores: string[] }
+        Returns: undefined
+      }
+      rpc_editar_atendimento: {
+        Args: {
+          p_atendimento_id: string
+          p_chegou_em: string
+          p_cliente_id: string
+          p_lavadores: string[]
+          p_motivo: string
+          p_observacoes: string
+          p_pagamentos: Json
+          p_servico_id: string
+          p_valor_final: number
+          p_veiculo_id: string
+        }
+        Returns: undefined
+      }
+      rpc_fechar_repasses_dia: {
+        Args: {
+          p_atendimentos_pendentes?: string[]
+          p_data_operacao: string
+          p_observacoes?: string
+        }
+        Returns: string
+      }
+      rpc_listar_atendimentos_fechamento: {
+        Args: { p_data_operacao: string }
+        Returns: {
+          agendado_para: string | null
+          cancelado_em: string | null
+          categoria_veiculo_snapshot: string | null
+          chegou_em: string | null
+          cliente_id: string | null
+          entregue_em: string | null
+          id: string | null
+          lavadores: Json | null
+          lavagem_iniciada_em: string | null
+          motivo_cancelamento: string | null
+          nome_cliente_snapshot: string | null
+          observacoes: string | null
+          pagamentos: Json | null
+          pronto_em: string | null
+          servico_id: string | null
+          servico_snapshot: string | null
+          status: Database["public"]["Enums"]["status_atendimento"] | null
+          total_pago: number | null
+          valor_empresa_snapshot: number | null
+          valor_final: number | null
+          veiculo_id: string | null
+          veiculo_snapshot: string | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "vw_painel_atendimentos"
+          isOneToOne: false
+          isSetofReturn: true
+        }
       }
       usuario_tem_papel: {
         Args: { p_papel: Database["public"]["Enums"]["papel_usuario"] }
