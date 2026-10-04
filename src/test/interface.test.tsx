@@ -57,11 +57,19 @@ const filaTeste = [
     chegou_em: "2026-10-02T08:30:00-03:00",
     agendado_para: null as string | null,
     valor_final: 100,
+    cliente_id: "cliente-teste",
+    veiculo_id: "veiculo-teste",
+    servico_id: "servico-teste",
+    observacoes: null,
     nome_cliente_snapshot: "Cliente de teste",
     veiculo_snapshot: "Veículo de teste",
     categoria_veiculo_snapshot: "Categoria de teste",
     servico_snapshot: "Serviço de teste",
     lavadores: [{ perfil_id: "lavador-teste", nome: "Lavador de teste", ordem_rateio: 1 }],
+    pagamentos: [] as {
+      forma_pagamento: "dinheiro" | "pix" | "debito" | "credito" | "outro";
+      valor: number;
+    }[],
   },
 ];
 
@@ -413,14 +421,90 @@ describe("interface operacional", () => {
   it.each([
     ["lavador", false],
     ["administrador", true],
-  ] as const)("respeita a correção de participantes para %s", (papel, podeCorrigir) => {
-    renderFila([{ ...filaTeste[0]!, lavadores: [] }], papel);
+  ] as const)("restringe a edição completa do atendimento para %s", (papel, podeEditar) => {
+    renderFila(filaTeste, papel);
     expect(screen.getByRole("button", { name: "Novo atendimento" })).toBeInTheDocument();
-    if (podeCorrigir) {
-      expect(screen.getByRole("button", { name: "Corrigir lavadores" })).toBeInTheDocument();
+    if (podeEditar) {
+      expect(screen.getByRole("button", { name: "Editar informações" })).toBeInTheDocument();
     } else {
-      expect(screen.queryByRole("button", { name: "Corrigir lavadores" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Editar informações" })).not.toBeInTheDocument();
     }
+  });
+
+  it("mostra a forma de pagamento no atendimento concluído", () => {
+    renderFila([
+      {
+        ...filaTeste[0]!,
+        status: "entregue",
+        pagamentos: [{ forma_pagamento: "pix", valor: 100 }],
+      },
+    ]);
+
+    expect(screen.getByText("Pagamento")).toBeInTheDocument();
+    expect(screen.getByText("PIX")).toBeInTheDocument();
+  });
+
+  it("oferece edição administrativa em todas as etapas", () => {
+    renderFila(
+      ["aguardando", "em_lavagem", "pronto_para_retirada", "entregue"].map((status, indice) => ({
+        ...filaTeste[0]!,
+        id: `atendimento-${indice}`,
+        status,
+      })),
+      "administrador",
+    );
+
+    expect(screen.getAllByRole("button", { name: "Editar informações" })).toHaveLength(4);
+  });
+
+  it("salva a edição administrativa com auditoria e sem pagamento antecipado", async () => {
+    renderFila(filaTeste, "administrador", (qc) => {
+      qc.setQueryData(["opcoes-edicao-atendimento"], {
+        clientes: [
+          { id: "cliente-teste", nome_completo: "Cliente de teste", telefone: "85999999999" },
+        ],
+        servicos: [{ id: "servico-teste", nome: "Serviço de teste" }],
+        lavadores: [{ id: "lavador-teste", nome: "Lavador de teste" }],
+      });
+      qc.setQueryData(
+        ["veiculos-edicao-atendimento", "cliente-teste"],
+        [
+          {
+            id: "veiculo-teste",
+            marca: "Marca teste",
+            modelo: "Modelo teste",
+            placa: "ABC-1D23",
+            cor: "Azul",
+            categorias_veiculo: { nome: "Categoria de teste" },
+          },
+        ],
+      );
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Editar informações" }));
+    const dialogo = screen.getByRole("dialog", { name: "Editar informações do atendimento" });
+    fireEvent.change(within(dialogo).getByLabelText("Valor final (R$) (opcional)"), {
+      target: { value: "80,50" },
+    });
+    fireEvent.change(within(dialogo).getByLabelText("Motivo da edição"), {
+      target: { value: "Correção solicitada pelo administrador" },
+    });
+    fireEvent.click(within(dialogo).getByRole("button", { name: "Salvar atendimento" }));
+
+    await waitFor(() =>
+      expect(mocks.rpc).toHaveBeenCalledWith(
+        "rpc_editar_atendimento",
+        expect.objectContaining({
+          p_atendimento_id: "atendimento-teste",
+          p_cliente_id: "cliente-teste",
+          p_veiculo_id: "veiculo-teste",
+          p_servico_id: "servico-teste",
+          p_lavadores: ["lavador-teste"],
+          p_valor_final: 80.5,
+          p_pagamentos: [],
+          p_motivo: "Correção solicitada pelo administrador",
+        }),
+      ),
+    );
   });
 
   it("abre diálogo de entrega com campos rotulados e restaura foco ao fechar", async () => {

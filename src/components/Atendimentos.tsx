@@ -7,12 +7,15 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock3,
+  CreditCard,
   Droplets,
   LoaderCircle,
+  PencilLine,
   Plus,
   UsersRound,
   XCircle,
 } from "lucide-react";
+import { DialogoFormulario } from "@/components/DialogoFormulario";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -54,6 +57,10 @@ const campo = "lc-field";
 const rotulo = "lc-label";
 
 type Lavador = { perfil_id: string; nome: string; ordem_rateio: number };
+type Pagamento = {
+  forma_pagamento: PagamentoEntrada["forma_pagamento"];
+  valor: number;
+};
 type ItemFila = {
   id: string;
   status: StatusAtendimento;
@@ -64,7 +71,12 @@ type ItemFila = {
   veiculo_snapshot: string;
   categoria_veiculo_snapshot: string;
   servico_snapshot: string;
+  cliente_id: string;
+  veiculo_id: string;
+  servico_id: string;
+  observacoes: string | null;
   lavadores: Lavador[];
+  pagamentos: Pagamento[];
 };
 type Cliente = { id: string; nome_completo: string; telefone: string };
 type Veiculo = {
@@ -84,7 +96,7 @@ export function FilaAtendimentos({ perfilId, papel }: { perfilId: string; papel:
   const [abrirForm, setAbrirForm] = useState(false);
   const [acao, setAcao] = useState<{
     item: ItemFila;
-    tipo: "avancar" | "cancelar" | "participantes";
+    tipo: "avancar" | "cancelar" | "participantes" | "editar";
   } | null>(null);
   const intervalo = intervaloDataLocal(data);
   const fila = useQuery({
@@ -93,7 +105,7 @@ export function FilaAtendimentos({ perfilId, papel }: { perfilId: string; papel:
       const { data, error } = await db()
         .from("vw_painel_atendimentos")
         .select(
-          "id, status, chegou_em, agendado_para, valor_final, nome_cliente_snapshot, veiculo_snapshot, categoria_veiculo_snapshot, servico_snapshot, lavadores",
+          "id, status, chegou_em, agendado_para, valor_final, nome_cliente_snapshot, veiculo_snapshot, categoria_veiculo_snapshot, servico_snapshot, cliente_id, veiculo_id, servico_id, observacoes, lavadores, pagamentos",
         )
         .gte("chegou_em", intervalo.inicio)
         .lt("chegou_em", intervalo.fim)
@@ -268,13 +280,23 @@ export function FilaAtendimentos({ perfilId, papel }: { perfilId: string; papel:
                   item={item}
                   ordem={indice + 1}
                   papel={papel}
-                  onAcao={() => undefined}
+                  onAcao={(tipo) => setAcao({ item, tipo })}
                 />
               ))}
           </ul>
         </section>
       )}
-      {acao && (
+      {acao?.tipo === "editar" && (
+        <EditarAtendimento
+          item={acao.item}
+          aoFechar={() => setAcao(null)}
+          aoSalvar={() => {
+            setAcao(null);
+            atualizar();
+          }}
+        />
+      )}
+      {acao && acao.tipo !== "editar" && (
         <AcaoAtendimento
           item={acao.item}
           tipo={acao.tipo}
@@ -298,7 +320,7 @@ function CartaoAtendimento({
   item: ItemFila;
   ordem: number;
   papel: Papel;
-  onAcao: (tipo: "avancar" | "cancelar" | "participantes") => void;
+  onAcao: (tipo: "avancar" | "cancelar" | "participantes" | "editar") => void;
 }) {
   const ativo = STATUS_ATIVOS.includes(item.status);
   return (
@@ -325,7 +347,7 @@ function CartaoAtendimento({
           <StatusBadge status={item.status} />
         </div>
       </div>
-      <dl className="my-4 grid grid-cols-2 gap-x-4 gap-y-4 text-sm lg:grid-cols-4">
+      <dl className="my-4 grid grid-cols-2 gap-x-4 gap-y-4 text-sm lg:grid-cols-5">
         <div>
           <dt className="mb-1 text-xs text-muted-foreground">Serviço</dt>
           <dd className="font-medium">{item.servico_snapshot}</dd>
@@ -355,29 +377,56 @@ function CartaoAtendimento({
             {item.lavadores.map((lavador) => lavador.nome).join(", ") || "Não vinculados"}
           </dd>
         </div>
+        <div>
+          <dt className="mb-1 flex items-center gap-1 text-xs text-muted-foreground">
+            <CreditCard className="size-3" aria-hidden="true" />
+            Pagamento
+          </dt>
+          <dd className="font-medium">
+            {(item.pagamentos ?? []).length
+              ? item.pagamentos
+                  .map(
+                    (pagamento) =>
+                      ({
+                        dinheiro: "Dinheiro",
+                        pix: "PIX",
+                        debito: "Débito",
+                        credito: "Crédito",
+                        outro: "Outro",
+                      })[pagamento.forma_pagamento],
+                  )
+                  .join(" + ")
+              : "Pendente"}
+          </dd>
+        </div>
       </dl>
-      {ativo && (
+      {(ativo || papel === "administrador") && (
         <div className="flex flex-wrap items-center gap-2 border-t border-dashed pt-3">
-          <Button
-            size="sm"
-            variant="outline"
-            className="border-primary/20 bg-accent text-primary hover:border-primary"
-            onClick={() => onAcao("avancar")}
-          >
-            {ACAO[item.status]}
-            <ArrowRight aria-hidden="true" />
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            className="text-muted-foreground hover:bg-destructive/5 hover:text-destructive"
-            onClick={() => onAcao("cancelar")}
-          >
-            Cancelar
-          </Button>
-          {papel === "administrador" && item.lavadores.length === 0 && (
-            <Button size="sm" variant="outline" onClick={() => onAcao("participantes")}>
-              Corrigir lavadores
+          {ativo && (
+            <>
+              <Button
+                size="sm"
+                variant="outline"
+                className="border-primary/20 bg-accent text-primary hover:border-primary"
+                onClick={() => onAcao("avancar")}
+              >
+                {ACAO[item.status]}
+                <ArrowRight aria-hidden="true" />
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="text-muted-foreground hover:bg-destructive/5 hover:text-destructive"
+                onClick={() => onAcao("cancelar")}
+              >
+                Cancelar
+              </Button>
+            </>
+          )}
+          {papel === "administrador" && (
+            <Button size="sm" variant="outline" onClick={() => onAcao("editar")}>
+              <PencilLine aria-hidden="true" />
+              Editar informações
             </Button>
           )}
         </div>
@@ -946,6 +995,317 @@ function NovoAtendimento({
         {salvar.isPending ? "Registrando..." : textoAcao}
       </Button>
     </form>
+  );
+}
+
+function EditarAtendimento({
+  item,
+  aoFechar,
+  aoSalvar,
+}: {
+  item: ItemFila;
+  aoFechar: () => void;
+  aoSalvar: () => void;
+}) {
+  const [clienteId, setClienteId] = useState(item.cliente_id ?? "");
+  const [veiculoId, setVeiculoId] = useState(item.veiculo_id ?? "");
+  const [servicoId, setServicoId] = useState(item.servico_id ?? "");
+  const [dataHora, setDataHora] = useState(() => dataHoraLocalInput(new Date(item.chegou_em)));
+  const [valor, setValor] = useState(
+    item.valor_final == null ? "" : String(item.valor_final).replace(".", ","),
+  );
+  const [observacoes, setObservacoes] = useState(item.observacoes ?? "");
+  const [lavadores, setLavadores] = useState(item.lavadores.map((lavador) => lavador.perfil_id));
+  const [pagamentos, setPagamentos] = useState<
+    { forma_pagamento: PagamentoEntrada["forma_pagamento"]; valor: string }[]
+  >(() =>
+    (item.pagamentos ?? []).length
+      ? item.pagamentos.map((pagamento) => ({
+          forma_pagamento: pagamento.forma_pagamento,
+          valor: String(pagamento.valor).replace(".", ","),
+        }))
+      : [{ forma_pagamento: "pix", valor }],
+  );
+  const [motivo, setMotivo] = useState("");
+  const [erro, setErro] = useState<string | null>(null);
+  const concluido = item.status === "entregue";
+
+  const opcoes = useQuery({
+    queryKey: ["opcoes-edicao-atendimento"],
+    queryFn: async () => {
+      const [clientes, servicos, papeis] = await Promise.all([
+        db().from("clientes").select("id, nome_completo, telefone").order("nome_completo"),
+        db().from("servicos_lavagem").select("id, nome").order("nome"),
+        db()
+          .from("papeis_perfil")
+          .select("perfis(id, nome_completo, ativo)")
+          .eq("papel", "lavador"),
+      ]);
+      if (clientes.error) throw clientes.error;
+      if (servicos.error) throw servicos.error;
+      if (papeis.error) throw papeis.error;
+      return {
+        clientes: clientes.data as Cliente[],
+        servicos: servicos.data as Opcao[],
+        lavadores: (
+          papeis.data as unknown as {
+            perfis: { id: string; nome_completo: string; ativo: boolean } | null;
+          }[]
+        ).flatMap((papel) =>
+          papel.perfis?.ativo ? [{ id: papel.perfis.id, nome: papel.perfis.nome_completo }] : [],
+        ),
+      };
+    },
+  });
+  const veiculos = useQuery({
+    queryKey: ["veiculos-edicao-atendimento", clienteId],
+    enabled: !!clienteId,
+    queryFn: async () => {
+      const { data, error } = await db()
+        .from("veiculos")
+        .select("id, marca, modelo, placa, cor, categorias_veiculo(nome)")
+        .eq("cliente_id", clienteId)
+        .order("marca")
+        .order("modelo");
+      if (error) throw error;
+      return data as unknown as Veiculo[];
+    },
+  });
+
+  const salvar = useMutation({
+    mutationFn: async () => {
+      if (!clienteId || !veiculoId || !servicoId) {
+        throw new Error("Selecione cliente, veículo e serviço.");
+      }
+      if (!lavadores.length) throw new Error("Selecione pelo menos um lavador.");
+      if (motivo.trim().length < 5) throw new Error("Informe o motivo da edição.");
+      const valorCentavos = valor.trim() ? reaisParaCentavos(valor) : null;
+      if (valorCentavos !== null && valorCentavos <= 0) {
+        throw new Error("Informe um valor final maior que zero.");
+      }
+      const listaPagamentos: PagamentoEntrada[] = concluido
+        ? pagamentos.map((pagamento) => ({
+            forma_pagamento: pagamento.forma_pagamento,
+            valor_centavos: reaisParaCentavos(pagamento.valor),
+          }))
+        : [];
+      if (concluido) {
+        const validacao = validarEntrega(valorCentavos, lavadores.length, listaPagamentos);
+        if (validacao) throw new Error(validacao);
+      }
+      const { error } = await db().rpc("rpc_editar_atendimento", {
+        p_atendimento_id: item.id,
+        p_cliente_id: clienteId,
+        p_veiculo_id: veiculoId,
+        p_servico_id: servicoId,
+        p_lavadores: lavadores,
+        p_chegou_em: momentoLocalParaIso(dataHora),
+        p_valor_final: valorCentavos == null ? null : valorCentavos / 100,
+        p_observacoes: observacoes.trim() || null,
+        p_pagamentos: listaPagamentos,
+        p_motivo: motivo.trim(),
+      });
+      if (error) throw error;
+    },
+    onSuccess: aoSalvar,
+    onError: (falha) => setErro(mensagemErro(falha)),
+  });
+
+  return (
+    <DialogoFormulario
+      aberto
+      titulo="Editar informações do atendimento"
+      descricao={`${item.nome_cliente_snapshot} · ${item.veiculo_snapshot}`}
+      erro={erro || (opcoes.error ? mensagemErro(opcoes.error) : null)}
+      salvando={salvar.isPending}
+      textoConfirmar="Salvar atendimento"
+      aoFechar={aoFechar}
+      aoEnviar={() => {
+        setErro(null);
+        salvar.mutate();
+      }}
+    >
+      <div className="grid gap-4 sm:grid-cols-2">
+        <label className={rotulo}>
+          Cliente
+          <select
+            className={campo}
+            value={clienteId}
+            onChange={(evento) => {
+              setClienteId(evento.target.value);
+              setVeiculoId("");
+            }}
+          >
+            <option value="">Selecione</option>
+            {opcoes.data?.clientes.map((cliente) => (
+              <option key={cliente.id} value={cliente.id}>
+                {cliente.nome_completo}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className={rotulo}>
+          Veículo
+          <select
+            className={campo}
+            value={veiculoId}
+            onChange={(evento) => setVeiculoId(evento.target.value)}
+          >
+            <option value="">Selecione</option>
+            {veiculos.data?.map((veiculo) => (
+              <option key={veiculo.id} value={veiculo.id}>
+                {veiculo.marca} {veiculo.modelo}
+                {veiculo.placa ? ` · ${veiculo.placa}` : " · Sem placa"}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <label className={rotulo}>
+          Serviço
+          <select
+            className={campo}
+            value={servicoId}
+            onChange={(evento) => setServicoId(evento.target.value)}
+          >
+            <option value="">Selecione</option>
+            {opcoes.data?.servicos.map((servico) => (
+              <option key={servico.id} value={servico.id}>
+                {servico.nome}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className={rotulo}>
+          Data e horário
+          <input
+            className={campo}
+            type="datetime-local"
+            value={dataHora}
+            onChange={(evento) => setDataHora(evento.target.value)}
+          />
+        </label>
+      </div>
+      <label className={rotulo}>
+        Valor final (R$) <span className="font-normal text-muted-foreground">(opcional)</span>
+        <input
+          className={campo}
+          inputMode="decimal"
+          value={valor}
+          onChange={(evento) => setValor(evento.target.value)}
+        />
+      </label>
+      <fieldset className="space-y-2">
+        <legend className="text-sm font-semibold">Lavadores participantes</legend>
+        <div className="grid gap-2 sm:grid-cols-2">
+          {opcoes.data?.lavadores.map((lavador) => (
+            <label key={lavador.id} className="lc-choice">
+              <input
+                type="checkbox"
+                checked={lavadores.includes(lavador.id)}
+                onChange={() =>
+                  setLavadores((lista) =>
+                    lista.includes(lavador.id)
+                      ? lista.filter((id) => id !== lavador.id)
+                      : [...lista, lavador.id],
+                  )
+                }
+              />
+              {lavador.nome}
+            </label>
+          ))}
+        </div>
+      </fieldset>
+      {concluido && (
+        <fieldset className="space-y-3 rounded-xl border bg-muted/35 p-4">
+          <legend className="px-1 text-sm font-semibold">Pagamentos</legend>
+          {pagamentos.map((pagamento, indice) => (
+            <div key={indice} className="grid grid-cols-2 gap-2">
+              <label className={rotulo}>
+                Forma {indice + 1}
+                <select
+                  className={campo}
+                  value={pagamento.forma_pagamento}
+                  onChange={(evento) =>
+                    setPagamentos((lista) =>
+                      lista.map((atual, posicao) =>
+                        posicao === indice
+                          ? {
+                              ...atual,
+                              forma_pagamento: evento.target
+                                .value as PagamentoEntrada["forma_pagamento"],
+                            }
+                          : atual,
+                      ),
+                    )
+                  }
+                >
+                  <option value="pix">PIX</option>
+                  <option value="dinheiro">Dinheiro</option>
+                  <option value="debito">Débito</option>
+                  <option value="credito">Crédito</option>
+                  <option value="outro">Outro</option>
+                </select>
+              </label>
+              <label className={rotulo}>
+                Valor (R$)
+                <input
+                  className={campo}
+                  inputMode="decimal"
+                  value={pagamento.valor}
+                  onChange={(evento) =>
+                    setPagamentos((lista) =>
+                      lista.map((atual, posicao) =>
+                        posicao === indice ? { ...atual, valor: evento.target.value } : atual,
+                      ),
+                    )
+                  }
+                />
+              </label>
+              {pagamentos.length > 1 && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="col-span-2 text-destructive"
+                  onClick={() =>
+                    setPagamentos((lista) => lista.filter((_, posicao) => posicao !== indice))
+                  }
+                >
+                  Remover pagamento
+                </Button>
+              )}
+            </div>
+          ))}
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() =>
+              setPagamentos((lista) => [...lista, { forma_pagamento: "pix", valor: "" }])
+            }
+          >
+            + Dividir pagamento
+          </Button>
+        </fieldset>
+      )}
+      <label className={rotulo}>
+        Observações <span className="font-normal text-muted-foreground">(opcional)</span>
+        <textarea
+          className={`${campo} min-h-20 resize-y`}
+          value={observacoes}
+          onChange={(evento) => setObservacoes(evento.target.value)}
+        />
+      </label>
+      <label className={rotulo}>
+        Motivo da edição
+        <textarea
+          className={`${campo} min-h-20 resize-y`}
+          placeholder="Explique por que as informações foram alteradas"
+          value={motivo}
+          onChange={(evento) => setMotivo(evento.target.value)}
+        />
+      </label>
+    </DialogoFormulario>
   );
 }
 
