@@ -1,13 +1,27 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-import { calcularResumoFechamento, dataLocalIso } from "@/lib/fechamento";
+import {
+  calcularResumoFechamento,
+  dataLocalIso,
+  deslocarDataLocal,
+  intervaloDataLocal,
+} from "@/lib/fechamento";
 import { dividirRepasseCentavos } from "@/lib/regras";
 import { mensagemErro } from "@/lib/supabase-db";
 
 describe("fechamento diário", () => {
   it("mantém a data local perto da virada do dia", () => {
     expect(dataLocalIso(new Date(2026, 9, 2, 23, 59, 59))).toBe("2026-10-02");
+  });
+
+  it("navega entre dias e cria limites locais completos", () => {
+    expect(deslocarDataLocal("2026-10-01", -1)).toBe("2026-09-30");
+    expect(deslocarDataLocal("2026-10-31", 1)).toBe("2026-11-01");
+    const intervalo = intervaloDataLocal("2026-10-04");
+    expect(new Date(intervalo.fim).getTime() - new Date(intervalo.inicio).getTime()).toBe(
+      86_400_000,
+    );
   });
 
   it("rateia centavos pela ordem e preserva o total", () => {

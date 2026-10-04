@@ -1,12 +1,16 @@
 import {
   ArrowRight,
+  CalendarDays,
   CarFront,
   CheckCheck,
+  ChevronLeft,
+  ChevronRight,
   Clock3,
   Droplets,
   LoaderCircle,
   Plus,
   UsersRound,
+  XCircle,
 } from "lucide-react";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
@@ -17,6 +21,7 @@ import { z } from "zod";
 
 import type { Papel } from "@/lib/acesso";
 import { montarParametrosNovoAtendimento, prepararBuscaCliente } from "@/lib/atendimento";
+import { dataLocalIso, deslocarDataLocal, intervaloDataLocal } from "@/lib/fechamento";
 import {
   proximoStatus,
   reaisParaCentavos,
@@ -28,13 +33,12 @@ import {
 import { db, formatarDataHora, formatarDinheiro, mensagemErro } from "@/lib/supabase-db";
 
 const STATUS_ATIVOS: StatusAtendimento[] = ["aguardando", "em_lavagem", "pronto_para_retirada"];
-const ROTULOS: Record<StatusAtendimento, string> = {
-  aguardando: "Aguardando",
-  em_lavagem: "Em lavagem",
-  pronto_para_retirada: "Pronto para retirada",
-  entregue: "Entregue",
-  cancelado: "Cancelado",
-};
+const ETAPAS = [
+  { status: "aguardando", nome: "Aguardando", icone: Clock3 },
+  { status: "em_lavagem", nome: "Em lavagem", icone: Droplets },
+  { status: "pronto_para_retirada", nome: "Pronto para retirada", icone: CheckCheck },
+  { status: "entregue", nome: "Concluídos", icone: CheckCheck },
+] as const;
 const ACAO: Partial<Record<StatusAtendimento, string>> = {
   aguardando: "Iniciar lavagem",
   em_lavagem: "Marcar como pronto",
@@ -68,20 +72,24 @@ type Opcao = { id: string; nome: string };
 
 export function FilaAtendimentos({ perfilId, papel }: { perfilId: string; papel: Papel }) {
   const qc = useQueryClient();
+  const hoje = dataLocalIso();
+  const [data, setData] = useState(hoje);
   const [abrirForm, setAbrirForm] = useState(false);
   const [acao, setAcao] = useState<{
     item: ItemFila;
     tipo: "avancar" | "cancelar" | "participantes";
   } | null>(null);
+  const intervalo = intervaloDataLocal(data);
   const fila = useQuery({
-    queryKey: ["fila-atendimentos"],
+    queryKey: ["fila-atendimentos", data],
     queryFn: async () => {
       const { data, error } = await db()
         .from("vw_painel_atendimentos")
         .select(
           "id, status, chegou_em, valor_final, nome_cliente_snapshot, veiculo_snapshot, categoria_veiculo_snapshot, servico_snapshot, lavadores",
         )
-        .in("status", STATUS_ATIVOS)
+        .gte("chegou_em", intervalo.inicio)
+        .lt("chegou_em", intervalo.fim)
         .order("chegou_em");
       if (error) throw error;
       return data as unknown as ItemFila[];
@@ -95,28 +103,72 @@ export function FilaAtendimentos({ perfilId, papel }: { perfilId: string; papel:
       <div className="lc-page-heading">
         <div>
           <span className="lc-eyebrow">Operação</span>
-          <h1 className="mt-2">Fila de atendimentos</h1>
-          <p>Da chegada à entrega, acompanhe cada etapa.</p>
+          <h1 className="mt-2">Central de atendimentos</h1>
+          <p>Acompanhe todos os atendimentos do dia, da chegada à conclusão.</p>
         </div>
         {!abrirForm && (
-          <Button className="w-full sm:w-auto" onClick={() => setAbrirForm(true)}>
+          <Button
+            className="w-full sm:w-auto"
+            onClick={() => {
+              setData(hoje);
+              setAbrirForm(true);
+            }}
+          >
             <Plus aria-hidden="true" />
             Novo atendimento
           </Button>
         )}
       </div>
       {abrirForm && <NovoAtendimento perfilId={perfilId} onFechar={() => setAbrirForm(false)} />}
-      <div className="grid grid-cols-3 gap-2 sm:gap-3" aria-label="Resumo da fila">
-        {[
-          { status: "aguardando", nome: "Aguardando", icone: Clock3 },
-          { status: "em_lavagem", nome: "Em lavagem", icone: Droplets },
-          { status: "pronto_para_retirada", nome: "Prontos para retirada", icone: CheckCheck },
-        ].map(({ status, nome, icone: Icone }) => (
+      <div className="lc-panel flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="lc-eyebrow">Dia da operação</p>
+          <p className="mt-1 flex items-center gap-2 font-semibold">
+            <CalendarDays className="size-4 text-primary" aria-hidden="true" />
+            {new Date(`${data}T12:00:00`).toLocaleDateString("pt-BR", {
+              weekday: "long",
+              day: "2-digit",
+              month: "long",
+              year: "numeric",
+            })}
+          </p>
+        </div>
+        <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-end gap-2 sm:flex">
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            aria-label="Dia anterior"
+            onClick={() => setData((atual) => deslocarDataLocal(atual, -1))}
+          >
+            <ChevronLeft aria-hidden="true" />
+          </Button>
+          <label className="lc-label min-w-0 sm:w-44">
+            <span className="sr-only">Selecionar data da operação</span>
+            <input
+              type="date"
+              className="lc-field"
+              max={hoje}
+              value={data}
+              onChange={(evento) => setData(evento.target.value || hoje)}
+            />
+          </label>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            aria-label="Próximo dia"
+            disabled={data >= hoje}
+            onClick={() => setData((atual) => deslocarDataLocal(atual, 1))}
+          >
+            <ChevronRight aria-hidden="true" />
+          </Button>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-2 sm:gap-3 xl:grid-cols-4" aria-label="Resumo do dia">
+        {ETAPAS.map(({ status, nome, icone: Icone }) => (
           <div key={status} className="lc-stat !gap-2 !p-3 sm:!gap-3 sm:!p-4">
-            <span
-              className="lc-status !hidden !rounded-xl !p-3 sm:!inline-flex"
-              data-status={status}
-            >
+            <span className="lc-status !rounded-xl !p-2.5 sm:!p-3" data-status={status}>
               <Icone className="!size-5" aria-hidden="true" />
             </span>
             <div>
@@ -128,113 +180,87 @@ export function FilaAtendimentos({ perfilId, papel }: { perfilId: string; papel:
           </div>
         ))}
       </div>
-      <div className="lc-panel !p-0">
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b px-5 py-4">
-          <h2 className="text-sm font-semibold">Atendimentos ativos</h2>
-          <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <Clock3 className="size-3.5" aria-hidden="true" />
-            Ordem de chegada
-          </span>
-        </div>
-        {fila.isLoading && (
-          <p
-            role="status"
-            className="flex items-center justify-center gap-2 p-10 text-sm text-muted-foreground"
-          >
-            <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
-            Carregando fila...
-          </p>
-        )}
-        {fila.error && (
-          <p role="alert" className="lc-message m-4">
-            {mensagemErro(fila.error)}
-          </p>
-        )}
-        {fila.data?.length === 0 && (
-          <div className="lc-empty m-5">
-            <CarFront aria-hidden="true" />
-            <p className="font-semibold text-foreground">Nenhum atendimento ativo.</p>
+      {fila.isLoading && (
+        <p
+          role="status"
+          className="flex items-center justify-center gap-2 p-10 text-sm text-muted-foreground"
+        >
+          <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
+          Carregando atendimentos...
+        </p>
+      )}
+      {fila.error && (
+        <p role="alert" className="lc-message">
+          {mensagemErro(fila.error)}
+        </p>
+      )}
+      {fila.data?.length === 0 && (
+        <div className="lc-empty">
+          <CarFront aria-hidden="true" />
+          <p className="font-semibold text-foreground">Nenhum atendimento neste dia.</p>
+          {data === hoje && (
             <p className="mt-1">Use “Novo atendimento” para registrar a próxima chegada.</p>
+          )}
+        </div>
+      )}
+      {ETAPAS.map(({ status, nome, icone: Icone }) => {
+        const itens = fila.data?.filter((item) => item.status === status) ?? [];
+        return (
+          <section key={status} className="lc-panel !p-0" aria-labelledby={`etapa-${status}`}>
+            <div className="flex items-center justify-between gap-3 border-b px-4 py-3 sm:px-5 sm:py-4">
+              <h2 id={`etapa-${status}`} className="flex items-center gap-2 font-semibold">
+                <span className="lc-status !rounded-lg !p-2" data-status={status}>
+                  <Icone className="!size-4" aria-hidden="true" />
+                </span>
+                {nome}
+              </h2>
+              <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-semibold tabular-nums">
+                {itens.length}
+              </span>
+            </div>
+            {itens.length === 0 ? (
+              <p className="px-4 py-5 text-sm text-muted-foreground sm:px-5">
+                Nenhum atendimento nesta etapa.
+              </p>
+            ) : (
+              <ul className="divide-y">
+                {itens.map((item, indice) => (
+                  <CartaoAtendimento
+                    key={item.id}
+                    item={item}
+                    ordem={indice + 1}
+                    papel={papel}
+                    onAcao={(tipo) => setAcao({ item, tipo })}
+                  />
+                ))}
+              </ul>
+            )}
+          </section>
+        );
+      })}
+      {!!fila.data?.some((item) => item.status === "cancelado") && (
+        <section className="lc-panel !p-0" aria-labelledby="etapa-cancelados">
+          <div className="flex items-center gap-2 border-b px-4 py-3 sm:px-5">
+            <XCircle className="size-4 text-destructive" aria-hidden="true" />
+            <h2 id="etapa-cancelados" className="font-semibold">
+              Cancelados
+            </h2>
           </div>
-        )}
-        <ul className="divide-y">
-          {fila.data?.map((item, indice) => (
-            <li key={item.id} className="p-4 sm:p-5">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="flex min-w-0 gap-3">
-                  <span className="flex size-10 shrink-0 items-center justify-center rounded-xl border bg-muted text-xs font-semibold tabular-nums text-muted-foreground">
-                    {String(indice + 1).padStart(2, "0")}
-                  </span>
-                  <div className="min-w-0">
-                    <h3 className="font-semibold">{item.nome_cliente_snapshot}</h3>
-                    <p className="mt-0.5 text-sm text-muted-foreground">
-                      {item.veiculo_snapshot} · {item.categoria_veiculo_snapshot}
-                    </p>
-                  </div>
-                </div>
-                <StatusBadge status={item.status} />
-              </div>
-              <dl className="my-5 grid grid-cols-2 gap-x-4 gap-y-4 text-sm xl:grid-cols-4">
-                <div>
-                  <dt className="mb-1 text-xs text-muted-foreground">Serviço</dt>
-                  <dd className="font-medium">{item.servico_snapshot}</dd>
-                </div>
-                <div>
-                  <dt className="mb-1 text-xs text-muted-foreground">Chegada</dt>
-                  <dd className="font-medium">{formatarDataHora(item.chegou_em)}</dd>
-                </div>
-                <div>
-                  <dt className="mb-1 text-xs text-muted-foreground">Valor</dt>
-                  <dd className="font-semibold tabular-nums">
-                    {item.valor_final == null ? (
-                      <span className="text-[var(--status-wait-fg)]">Valor pendente</span>
-                    ) : (
-                      formatarDinheiro(item.valor_final)
-                    )}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="mb-1 flex items-center gap-1 text-xs text-muted-foreground">
-                    <UsersRound className="size-3" aria-hidden="true" />
-                    Lavadores
-                  </dt>
-                  <dd className="font-medium">
-                    {item.lavadores.map((l) => l.nome).join(", ") || "Não vinculados"}
-                  </dd>
-                </div>
-              </dl>
-              <div className="flex flex-wrap items-center gap-2 border-t border-dashed pt-3">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="border-primary/20 bg-accent text-primary hover:border-primary"
-                  onClick={() => setAcao({ item, tipo: "avancar" })}
-                >
-                  {ACAO[item.status]}
-                  <ArrowRight aria-hidden="true" />
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="text-muted-foreground hover:bg-destructive/5 hover:text-destructive"
-                  onClick={() => setAcao({ item, tipo: "cancelar" })}
-                >
-                  Cancelar
-                </Button>
-                {papel === "administrador" && item.lavadores.length === 0 && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setAcao({ item, tipo: "participantes" })}
-                  >
-                    Corrigir lavadores
-                  </Button>
-                )}
-              </div>
-            </li>
-          ))}
-        </ul>
-      </div>
+          <ul className="divide-y">
+            {fila.data
+              .filter((item) => item.status === "cancelado")
+              .map((item, indice) => (
+                <CartaoAtendimento
+                  key={item.id}
+                  item={item}
+                  ordem={indice + 1}
+                  papel={papel}
+                  onAcao={() => undefined}
+                />
+              ))}
+          </ul>
+        </section>
+      )}
       {acao && (
         <AcaoAtendimento
           item={acao.item}
@@ -247,6 +273,93 @@ export function FilaAtendimentos({ perfilId, papel }: { perfilId: string; papel:
         />
       )}
     </section>
+  );
+}
+
+function CartaoAtendimento({
+  item,
+  ordem,
+  papel,
+  onAcao,
+}: {
+  item: ItemFila;
+  ordem: number;
+  papel: Papel;
+  onAcao: (tipo: "avancar" | "cancelar" | "participantes") => void;
+}) {
+  const ativo = STATUS_ATIVOS.includes(item.status);
+  return (
+    <li className="p-4 sm:p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex min-w-0 gap-3">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-xl border bg-muted text-xs font-semibold tabular-nums text-muted-foreground">
+            {String(ordem).padStart(2, "0")}
+          </span>
+          <div className="min-w-0">
+            <h3 className="font-semibold">{item.nome_cliente_snapshot}</h3>
+            <p className="mt-0.5 text-sm text-muted-foreground">
+              {item.veiculo_snapshot} · {item.categoria_veiculo_snapshot}
+            </p>
+          </div>
+        </div>
+        <StatusBadge status={item.status} />
+      </div>
+      <dl className="my-4 grid grid-cols-2 gap-x-4 gap-y-4 text-sm lg:grid-cols-4">
+        <div>
+          <dt className="mb-1 text-xs text-muted-foreground">Serviço</dt>
+          <dd className="font-medium">{item.servico_snapshot}</dd>
+        </div>
+        <div>
+          <dt className="mb-1 text-xs text-muted-foreground">Chegada</dt>
+          <dd className="font-medium">{formatarDataHora(item.chegou_em)}</dd>
+        </div>
+        <div>
+          <dt className="mb-1 text-xs text-muted-foreground">Valor</dt>
+          <dd className="font-semibold tabular-nums">
+            {item.valor_final == null ? (
+              <span className="text-[var(--status-wait-fg)]">Valor pendente</span>
+            ) : (
+              formatarDinheiro(item.valor_final)
+            )}
+          </dd>
+        </div>
+        <div>
+          <dt className="mb-1 flex items-center gap-1 text-xs text-muted-foreground">
+            <UsersRound className="size-3" aria-hidden="true" />
+            Lavadores
+          </dt>
+          <dd className="font-medium">
+            {item.lavadores.map((lavador) => lavador.nome).join(", ") || "Não vinculados"}
+          </dd>
+        </div>
+      </dl>
+      {ativo && (
+        <div className="flex flex-wrap items-center gap-2 border-t border-dashed pt-3">
+          <Button
+            size="sm"
+            variant="outline"
+            className="border-primary/20 bg-accent text-primary hover:border-primary"
+            onClick={() => onAcao("avancar")}
+          >
+            {ACAO[item.status]}
+            <ArrowRight aria-hidden="true" />
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="text-muted-foreground hover:bg-destructive/5 hover:text-destructive"
+            onClick={() => onAcao("cancelar")}
+          >
+            Cancelar
+          </Button>
+          {papel === "administrador" && item.lavadores.length === 0 && (
+            <Button size="sm" variant="outline" onClick={() => onAcao("participantes")}>
+              Corrigir lavadores
+            </Button>
+          )}
+        </div>
+      )}
+    </li>
   );
 }
 
@@ -1021,6 +1134,22 @@ function AcaoAtendimento({
                 </p>
               )}
             </fieldset>
+            {pagamentos.some((pagamento) => pagamento.forma_pagamento === "pix") && (
+              <section
+                className="rounded-2xl border bg-card p-4 text-center"
+                aria-label="Pagamento por PIX"
+              >
+                <h3 className="font-semibold">Pagamento por PIX</h3>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Mostre este QR Code ao cliente para realizar o pagamento.
+                </p>
+                <img
+                  src="/pix-lava-rapido.jpeg"
+                  alt="QR Code PIX do Lava Rápido Auto Clean"
+                  className="mx-auto mt-4 aspect-square w-full max-w-72 rounded-xl border bg-white object-contain p-2"
+                />
+              </section>
+            )}
           </>
         )}
         {erro && (

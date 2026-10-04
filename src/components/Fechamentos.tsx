@@ -1,10 +1,10 @@
 import { Button } from "@/components/ui/button";
-import { CheckCheck, LoaderCircle, Wallet } from "lucide-react";
+import { CalendarDays, CarFront, CheckCheck, LoaderCircle, Wallet } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useRef, useState } from "react";
 
 import type { Papel } from "@/lib/acesso";
-import { calcularResumoFechamento, dataLocalIso } from "@/lib/fechamento";
+import { calcularResumoFechamento, dataLocalIso, intervaloDataLocal } from "@/lib/fechamento";
 import { reaisParaCentavos } from "@/lib/regras";
 import { db, formatarDinheiro, formatarDataHora, mensagemErro } from "@/lib/supabase-db";
 
@@ -13,6 +13,7 @@ type AtendimentoFechamento = {
   entregue_em: string;
   nome_cliente_snapshot: string;
   veiculo_snapshot: string;
+  servico_snapshot: string;
   valor_final: number;
   valor_empresa_snapshot: number;
   total_pago: number;
@@ -33,6 +34,7 @@ export function Fechamentos({ perfilId, papel }: { perfilId: string; papel: Pape
   const [pendentes, setPendentes] = useState<string[]>([]);
   const [mensagem, setMensagem] = useState<string | null>(null);
   const fechandoRef = useRef(false);
+  const intervalo = intervaloDataLocal(data);
 
   const atendimentos = useQuery({
     queryKey: ["atendimentos-fechamento", data],
@@ -57,6 +59,24 @@ export function Fechamentos({ perfilId, papel }: { perfilId: string; papel: Pape
         .maybeSingle();
       if (error) throw error;
       return linha as { id: string; status: string; confirmado_em: string | null } | null;
+    },
+  });
+
+  const historicoDia = useQuery({
+    queryKey: ["historico-atendimentos", data],
+    enabled: papel === "administrador",
+    queryFn: async () => {
+      const { data: linhas, error } = await db()
+        .from("vw_painel_atendimentos")
+        .select(
+          "id, entregue_em, nome_cliente_snapshot, veiculo_snapshot, servico_snapshot, valor_final, valor_empresa_snapshot, total_pago, lavadores",
+        )
+        .eq("status", "entregue")
+        .gte("entregue_em", intervalo.inicio)
+        .lt("entregue_em", intervalo.fim)
+        .order("entregue_em");
+      if (error) throw error;
+      return (linhas ?? []) as unknown as AtendimentoFechamento[];
     },
   });
 
@@ -95,6 +115,18 @@ export function Fechamentos({ perfilId, papel }: { perfilId: string; papel: Pape
   const resumo = useMemo(() => {
     return calcularResumoFechamento(atendimentos.data ?? [], pendentes);
   }, [atendimentos.data, pendentes]);
+  const resumoDia = useMemo(
+    () => calcularResumoFechamento(historicoDia.data ?? [], []),
+    [historicoDia.data],
+  );
+  const repassesPorDia = useMemo(() => {
+    const grupos = new Map<string, Repasse[]>();
+    for (const repasse of meusRepasses.data ?? []) {
+      const dia = repasse.fechamentos_diarios?.data_operacao ?? "Sem data";
+      grupos.set(dia, [...(grupos.get(dia) ?? []), repasse]);
+    }
+    return [...grupos.entries()].sort(([dataA], [dataB]) => dataB.localeCompare(dataA));
+  }, [meusRepasses.data]);
 
   const totalAjustesCentavos = (ajustesPendentes.data ?? []).reduce(
     (total, item) => total + reaisParaCentavos(Number(item.valor)),
@@ -196,17 +228,40 @@ export function Fechamentos({ perfilId, papel }: { perfilId: string; papel: Pape
             Nenhum repasse registrado.
           </div>
         )}
-        <ul className="space-y-2">
-          {meusRepasses.data?.map((item) => (
-            <li key={item.id} className="lc-panel text-sm">
-              <strong>{formatarDinheiro(item.valor)}</strong> ·{" "}
-              {item.atendimentos?.veiculo_snapshot ?? "Atendimento"}
-              <span className="ml-2 text-muted-foreground">
-                {item.fechamentos_diarios?.data_operacao}
-              </span>
-            </li>
-          ))}
-        </ul>
+        <div className="space-y-5">
+          {repassesPorDia.map(([dia, repasses]) => {
+            const total = repasses.reduce((soma, item) => soma + Number(item.valor), 0);
+            return (
+              <section key={dia} className="lc-panel" aria-labelledby={`repasse-${dia}`}>
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b pb-4">
+                  <div>
+                    <p className="lc-eyebrow">Dia do fechamento</p>
+                    <h2
+                      id={`repasse-${dia}`}
+                      className="mt-1 flex items-center gap-2 font-semibold"
+                    >
+                      <CalendarDays className="size-4 text-primary" aria-hidden="true" />
+                      {dia === "Sem data"
+                        ? dia
+                        : new Date(`${dia}T12:00:00`).toLocaleDateString("pt-BR")}
+                    </h2>
+                  </div>
+                  <Resumo rotulo="Meu valor no dia" valor={formatarDinheiro(total)} compacto />
+                </div>
+                <ul className="grid gap-2 sm:grid-cols-2">
+                  {repasses.map((item) => (
+                    <li key={item.id} className="rounded-xl border bg-muted/40 p-3 text-sm">
+                      <strong>{formatarDinheiro(item.valor)}</strong>
+                      <p className="mt-1 text-muted-foreground">
+                        {item.atendimentos?.veiculo_snapshot ?? "Atendimento"}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            );
+          })}
+        </div>
       </section>
     );
   }
@@ -222,7 +277,7 @@ export function Fechamentos({ perfilId, papel }: { perfilId: string; papel: Pape
           </p>
         </div>
         <label className="lc-label w-full sm:w-auto">
-          Data do fechamento
+          Data para consultar e fechar
           <input
             type="date"
             max={hoje}
@@ -256,19 +311,86 @@ export function Fechamentos({ perfilId, papel }: { perfilId: string; papel: Pape
           {mensagemErro(ajustesPendentes.error)}
         </p>
       )}
+      {historicoDia.error && (
+        <p role="alert" className="lc-message">
+          {mensagemErro(historicoDia.error)}
+        </p>
+      )}
       {jaConfirmado && (
         <p role="status" className="lc-message">
           Fechamento desta data já confirmado. Novos atendimentos e ajustes serão considerados no
           próximo fechamento.
         </p>
       )}
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div>
+        <p className="lc-eyebrow">Produção do dia</p>
+        <h2 className="mt-1 text-lg font-semibold">Resumo dos serviços concluídos</h2>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
         <Resumo
-          rotulo="Total recebido"
-          valor={atendimentos.data ? formatarDinheiro(resumo.totalCentavos / 100) : "—"}
+          rotulo="Total do dia"
+          valor={historicoDia.data ? formatarDinheiro(resumoDia.totalCentavos / 100) : "—"}
         />
         <Resumo
           rotulo="Parte da empresa"
+          valor={historicoDia.data ? formatarDinheiro(resumoDia.empresaCentavos / 100) : "—"}
+        />
+        {resumoDia.porLavador.map((item) => (
+          <Resumo
+            key={item.nome}
+            rotulo={item.nome}
+            valor={formatarDinheiro(item.valorCentavos / 100)}
+          />
+        ))}
+      </div>
+      {historicoDia.isLoading && (
+        <p role="status" className="text-sm text-muted-foreground">
+          Carregando serviços concluídos...
+        </p>
+      )}
+      {historicoDia.data?.length === 0 && (
+        <div className="lc-empty">
+          <CarFront aria-hidden="true" />
+          Nenhum serviço concluído nesta data.
+        </div>
+      )}
+      {!!historicoDia.data?.length && (
+        <div className="lc-panel !p-0">
+          <div className="border-b px-4 py-3 sm:px-5">
+            <h2 className="font-semibold">O que foi lavado</h2>
+          </div>
+          <ul className="divide-y">
+            {historicoDia.data.map((item) => (
+              <li
+                key={item.id}
+                className="flex flex-col gap-1 px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between sm:px-5"
+              >
+                <span>
+                  <strong>{item.nome_cliente_snapshot}</strong> · {item.veiculo_snapshot}
+                  <span className="block text-muted-foreground sm:inline">
+                    {" "}
+                    · {item.servico_snapshot}
+                  </span>
+                </span>
+                <span className="font-semibold tabular-nums">
+                  {formatarDinheiro(item.valor_final)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      <div className="border-t pt-5">
+        <p className="lc-eyebrow">Fechamento</p>
+        <h2 className="mt-1 text-lg font-semibold">Pendências disponíveis para fechamento</h2>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <Resumo
+          rotulo="Total a fechar"
+          valor={atendimentos.data ? formatarDinheiro(resumo.totalCentavos / 100) : "—"}
+        />
+        <Resumo
+          rotulo="Empresa a fechar"
           valor={atendimentos.data ? formatarDinheiro(resumo.empresaCentavos / 100) : "—"}
         />
         <Resumo
@@ -285,16 +407,14 @@ export function Fechamentos({ perfilId, papel }: { perfilId: string; papel: Pape
         />
       </div>
       {!!resumo.porLavador.length && (
-        <div className="lc-panel">
-          <h2 className="mb-2 font-medium">Valores por lavador</h2>
-          <ul className="grid gap-1 text-sm sm:grid-cols-2">
-            {resumo.porLavador.map((item) => (
-              <li key={item.nome} className="flex justify-between gap-3">
-                <span>{item.nome}</span>
-                <strong>{formatarDinheiro(item.valorCentavos / 100)}</strong>
-              </li>
-            ))}
-          </ul>
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {resumo.porLavador.map((item) => (
+            <Resumo
+              key={item.nome}
+              rotulo={`${item.nome} · a fechar`}
+              valor={formatarDinheiro(item.valorCentavos / 100)}
+            />
+          ))}
         </div>
       )}
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -388,11 +508,23 @@ export function Fechamentos({ perfilId, papel }: { perfilId: string; papel: Pape
   );
 }
 
-function Resumo({ rotulo, valor }: { rotulo: string; valor: string }) {
+function Resumo({
+  rotulo,
+  valor,
+  compacto = false,
+}: {
+  rotulo: string;
+  valor: string;
+  compacto?: boolean;
+}) {
   return (
-    <div className="lc-panel">
+    <div className={compacto ? "rounded-xl border bg-accent px-4 py-2" : "lc-panel"}>
       <p className="text-sm text-muted-foreground">{rotulo}</p>
-      <p className="mt-2 text-2xl font-bold tracking-tight tabular-nums">{valor}</p>
+      <p
+        className={`${compacto ? "mt-0.5 text-lg" : "mt-2 text-2xl"} font-bold tracking-tight tabular-nums`}
+      >
+        {valor}
+      </p>
     </div>
   );
 }

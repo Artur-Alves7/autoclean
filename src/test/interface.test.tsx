@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { FilaAtendimentos } from "@/components/Atendimentos";
+import { ClientesVeiculos } from "@/components/ClientesVeiculos";
 import { Fechamentos } from "@/components/Fechamentos";
 import { PainelSistema } from "@/components/PainelSistema";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -9,6 +10,33 @@ import { dataLocalIso } from "@/lib/fechamento";
 
 const mocks = vi.hoisted(() => ({
   rpc: vi.fn().mockResolvedValue({ error: null }),
+  from: vi.fn((tabela: string) => {
+    if (tabela !== "clientes") throw new Error(`Tabela inesperada no teste: ${tabela}`);
+    return {
+      select: () => ({
+        order: () =>
+          Promise.resolve({
+            data: [
+              {
+                id: "cliente-z",
+                nome_completo: "Zilda de teste",
+                telefone: "85999999999",
+                observacoes: null,
+                ativo: true,
+              },
+              {
+                id: "cliente-a",
+                nome_completo: "Alice de teste",
+                telefone: "85888888888",
+                observacoes: null,
+                ativo: true,
+              },
+            ],
+            error: null,
+          }),
+      }),
+    };
+  }),
   navegar: vi.fn(),
 }));
 vi.mock("@tanstack/react-router", () => ({ useNavigate: () => mocks.navegar }));
@@ -17,7 +45,7 @@ vi.mock("@/integrations/supabase/client", () => ({
 }));
 vi.mock("@/lib/supabase-db", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/supabase-db")>()),
-  db: () => ({ rpc: mocks.rpc }),
+  db: () => ({ rpc: mocks.rpc, from: mocks.from }),
 }));
 
 const categoriaId = "d5319fa3-36ef-4f7d-a5ae-4f5399ea0e18";
@@ -39,7 +67,7 @@ function clienteDeTeste(fila = filaTeste) {
   const qc = new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: Infinity } },
   });
-  qc.setQueryData(["fila-atendimentos"], fila);
+  qc.setQueryData(["fila-atendimentos", dataLocalIso()], fila);
   qc.setQueryData(["auxiliares-atendimento"], {
     categorias: [{ id: categoriaId, nome: "Categoria de teste" }],
     servicos: [{ id: "servico-teste", nome: "Serviço de teste" }],
@@ -69,6 +97,7 @@ function renderFechamentos(
     atendimentos?: unknown[];
     fechamento?: { id: string; status: string; confirmado_em: string | null } | null;
     ajustes?: { id: string; valor: number }[];
+    historico?: unknown[];
   } = {},
 ) {
   const qc = clienteDeTeste([]);
@@ -90,6 +119,23 @@ function renderFechamentos(
   );
   qc.setQueryData(["fechamento-diario", hoje], opcoes.fechamento ?? null);
   qc.setQueryData(["ajustes-repasse-pendentes", hoje], opcoes.ajustes ?? []);
+  qc.setQueryData(
+    ["historico-atendimentos", hoje],
+    opcoes.historico ??
+      opcoes.atendimentos ?? [
+        {
+          id: "atendimento-entregue-teste",
+          entregue_em: `${hoje}T12:00:00-03:00`,
+          nome_cliente_snapshot: "Cliente de teste",
+          veiculo_snapshot: "Veículo de teste",
+          servico_snapshot: "Serviço de teste",
+          valor_final: 100,
+          valor_empresa_snapshot: 40,
+          total_pago: 100,
+          lavadores: [{ perfil_id: "lavador-teste", nome: "Lavador de teste", ordem_rateio: 1 }],
+        },
+      ],
+  );
   return render(
     <QueryClientProvider client={qc}>
       <Fechamentos perfilId="lavador-teste" papel={papel} />
@@ -116,7 +162,7 @@ describe("interface operacional", () => {
       "Aguardando",
       "Em lavagem",
       "Pronto para retirada",
-      "Entregue",
+      "Concluído",
       "Cancelado",
     ]) {
       expect(screen.getByText(nome)).toBeInTheDocument();
@@ -125,12 +171,34 @@ describe("interface operacional", () => {
 
   it("mantém a fila vazia e o botão de chegada funcionais", () => {
     renderFila([]);
-    expect(screen.getByText("Nenhum atendimento ativo.")).toBeInTheDocument();
+    expect(screen.getByText("Nenhum atendimento neste dia.")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Novo atendimento" }));
     expect(screen.getByRole("form", { name: "Registrar chegada" })).toBeInTheDocument();
     expect(screen.getByLabelText("Buscar cliente por nome, telefone ou placa")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Fechar" }));
     expect(screen.queryByRole("form")).not.toBeInTheDocument();
+  });
+
+  it("organiza a central verticalmente nas quatro etapas", () => {
+    renderFila();
+    for (const etapa of ["Aguardando", "Em lavagem", "Pronto para retirada", "Concluídos"]) {
+      expect(screen.getByRole("heading", { name: etapa })).toBeInTheDocument();
+    }
+    expect(screen.getByLabelText("Selecionar data da operação")).toBeInTheDocument();
+  });
+
+  it("carrega os clientes cadastrados em ordem alfabética sem exigir busca", async () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <ClientesVeiculos papel="lavador" />
+      </QueryClientProvider>,
+    );
+
+    const alice = await screen.findByText("Alice de teste");
+    const zilda = screen.getByText("Zilda de teste");
+    expect(alice.compareDocumentPosition(zilda) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByText("2 cliente(s)")).toBeInTheDocument();
   });
 
   it("preserva cadastro, participantes e preço pendente no payload", async () => {
@@ -318,6 +386,9 @@ describe("interface operacional", () => {
     const dialog = screen.getByRole("dialog", { name: "Registrar entrega" });
     expect(within(dialog).getByLabelText("Forma 1")).toBeInTheDocument();
     expect(within(dialog).getByLabelText("Valor (R$)", { exact: true })).toBeInTheDocument();
+    expect(
+      within(dialog).getByAltText("QR Code PIX do Lava Rápido Auto Clean"),
+    ).toBeInTheDocument();
     await waitFor(() => expect(dialog.contains(document.activeElement)).toBe(true));
     fireEvent.keyDown(document.activeElement!, { key: "Escape" });
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
