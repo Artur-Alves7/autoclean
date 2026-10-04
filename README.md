@@ -35,6 +35,8 @@ O esquema inicial já existe no Supabase Cloud. Não reaplique migrations antiga
 1. `supabase/migrations/20261002010000_operacao_segura_lavaclean.sql` — helpers seguros, correção versionada da recursão de RLS, view, function de rateio, RPCs transacionais e procedure de fechamento;
 2. `supabase/migrations/20261002011000_politicas_e_correcoes.sql` — políticas das tabelas usadas, administração de usuários e correção auditada;
 3. `supabase/migrations/20261002012000_ajustes_repasse.sql` — ajustes posteriores sem mutar lançamentos confirmados.
+4. `supabase/migrations/20261002013000_fechamento_diario_idempotente.sql` — fechamento idempotente por data, carregamento de pendências anteriores e consumo atômico de ajustes.
+5. `supabase/migrations/20261002014000_reforco_permissoes.sql` — escrita de participantes restrita às RPCs, correção administrativa somente em atendimentos ativos e validações estritas de pagamento na entrega.
 
 Antes de aplicar, faça backup e compare os objetos/políticas existentes no painel. Os arquivos usam `create or replace`, `create table if not exists` e políticas com nomes `lc_*`; não alteram nem apagam dados de negócio. A migration inicial do banco não está neste repositório, portanto o histórico versionado não prova sozinho o estado atual do ambiente Cloud.
 

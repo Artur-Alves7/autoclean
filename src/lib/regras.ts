@@ -19,7 +19,16 @@ export function podeTransicionar(de: StatusAtendimento, para: StatusAtendimento)
 }
 
 export function reaisParaCentavos(valor: string | number) {
-  const numero = typeof valor === "number" ? valor : Number(valor.trim().replace(",", "."));
+  let numero: number;
+  if (typeof valor === "number") {
+    numero = valor;
+  } else {
+    const texto = valor.trim();
+    if (!/^(?:\d+(?:[.,]\d{0,2})?|[.,]\d{1,2})$/.test(texto)) {
+      throw new Error("Informe um valor monetário válido, com no máximo dois centavos.");
+    }
+    numero = Number(texto.replace(",", "."));
+  }
   if (!Number.isFinite(numero) || numero < 0) throw new Error("Informe um valor monetário válido.");
   return Math.round((numero + Number.EPSILON) * 100);
 }
@@ -38,7 +47,18 @@ export function validarEntrega(
   pagamentos: readonly PagamentoEntrada[],
 ) {
   if (valorFinalCentavos == null) return "Informe o valor final antes da entrega.";
+  if (!Number.isInteger(valorFinalCentavos) || valorFinalCentavos <= 0) {
+    return "Informe um valor final maior que zero.";
+  }
   if (lavadores < 1) return "Vincule pelo menos um lavador antes da entrega.";
+  if (!pagamentos.length) return "Informe pelo menos uma forma de pagamento.";
+  if (
+    pagamentos.some(
+      (pagamento) => !Number.isInteger(pagamento.valor_centavos) || pagamento.valor_centavos <= 0,
+    )
+  ) {
+    return "Cada pagamento deve ter um valor maior que zero.";
+  }
   if (somaPagamentosCentavos(pagamentos) !== valorFinalCentavos) {
     return "A soma dos pagamentos deve ser exatamente igual ao valor final.";
   }

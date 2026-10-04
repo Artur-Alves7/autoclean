@@ -11,6 +11,8 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
+import { Route as DefinirSenhaRouteImport } from './routes/definir-senha'
+import { Route as RecuperarSenhaRouteImport } from './routes/recuperar-senha'
 import { Route as AuthenticatedAdminRouteImport } from './routes/_authenticated/admin'
 import { Route as AuthenticatedLavadorRouteImport } from './routes/_authenticated/lavador'
 
@@ -21,6 +23,16 @@ const IndexRoute = IndexRouteImport.update({
 } as any)
 const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
   id: '/_authenticated',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DefinirSenhaRoute = DefinirSenhaRouteImport.update({
+  id: '/definir-senha',
+  path: '/definir-senha',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RecuperarSenhaRoute = RecuperarSenhaRouteImport.update({
+  id: '/recuperar-senha',
+  path: '/recuperar-senha',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedAdminRoute = AuthenticatedAdminRouteImport.update({
@@ -36,11 +48,15 @@ const AuthenticatedLavadorRoute = AuthenticatedLavadorRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/definir-senha': typeof DefinirSenhaRoute
+  '/recuperar-senha': typeof RecuperarSenhaRoute
   '/admin': typeof AuthenticatedAdminRoute
   '/lavador': typeof AuthenticatedLavadorRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/definir-senha': typeof DefinirSenhaRoute
+  '/recuperar-senha': typeof RecuperarSenhaRoute
   '/admin': typeof AuthenticatedAdminRoute
   '/lavador': typeof AuthenticatedLavadorRoute
 }
@@ -48,18 +64,22 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
+  '/definir-senha': typeof DefinirSenhaRoute
+  '/recuperar-senha': typeof RecuperarSenhaRoute
   '/_authenticated/admin': typeof AuthenticatedAdminRoute
   '/_authenticated/lavador': typeof AuthenticatedLavadorRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/admin' | '/lavador'
+  fullPaths: '/' | '/definir-senha' | '/recuperar-senha' | '/admin' | '/lavador'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/admin' | '/lavador'
+  to: '/' | '/definir-senha' | '/recuperar-senha' | '/admin' | '/lavador'
   id:
     | '__root__'
     | '/'
     | '/_authenticated'
+    | '/definir-senha'
+    | '/recuperar-senha'
     | '/_authenticated/admin'
     | '/_authenticated/lavador'
   fileRoutesById: FileRoutesById
@@ -67,6 +87,8 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
+  DefinirSenhaRoute: typeof DefinirSenhaRoute
+  RecuperarSenhaRoute: typeof RecuperarSenhaRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -83,6 +105,20 @@ declare module '@tanstack/react-router' {
       path: ''
       fullPath: '/'
       preLoaderRoute: typeof AuthenticatedRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/definir-senha': {
+      id: '/definir-senha'
+      path: '/definir-senha'
+      fullPath: '/definir-senha'
+      preLoaderRoute: typeof DefinirSenhaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/recuperar-senha': {
+      id: '/recuperar-senha'
+      path: '/recuperar-senha'
+      fullPath: '/recuperar-senha'
+      preLoaderRoute: typeof RecuperarSenhaRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated/admin': {
@@ -118,6 +154,8 @@ const AuthenticatedRouteRouteWithChildren =
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
+  DefinirSenhaRoute: DefinirSenhaRoute,
+  RecuperarSenhaRoute: RecuperarSenhaRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

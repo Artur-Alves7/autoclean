@@ -5,6 +5,7 @@
 | Ver fila ativa                                    |                         Sim |                                    Sim |
 | Criar atendimento e participantes                 |                         Sim |                                    Sim |
 | Avançar status, cancelar e registrar pagamento    |                         Sim | Sim, quando o atendimento está visível |
+| Corrigir participantes de atendimento ativo       |                         Sim |                                    Não |
 | Ver atendimento concluído                         |                         Sim |                   Apenas se participou |
 | Corrigir atendimento concluído                    | Sim, com motivo e auditoria |                                    Não |
 | Pesquisar clientes/veículos e histórico permitido |                         Sim |                                    Sim |
@@ -18,6 +19,10 @@
 
 - O roteamento e os botões reduzem exposição acidental, mas não são a barreira de segurança.
 - RLS limita leituras diretas; RPCs `SECURITY DEFINER` revalidam perfil, papel, estado e consistência dentro da transação.
+- A tabela de participantes não aceita escrita direta de `authenticated`; criação e correção passam pelas RPCs validadas.
+- Valor final e pagamentos são aceitos pela RPC de avanço somente na entrega e precisam ser positivos e fechar exatamente em centavos.
 - A Edge Function de convite usa o JWT do administrador para autorizar e mantém `service_role` somente no ambiente do Supabase.
 - Valores são convertidos em centavos para divisão. O restante é distribuído pela `ordem_rateio`.
 - `placa_normalizada` é somente lida em pesquisas. Inserções/edições enviam `placa`, e o banco calcula a coluna gerada.
+
+O roteiro e as evidências da revisão da etapa 7 estão em [`validacao-seguranca-permissoes.md`](validacao-seguranca-permissoes.md).

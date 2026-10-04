@@ -2,8 +2,10 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { FilaAtendimentos } from "@/components/Atendimentos";
+import { Fechamentos } from "@/components/Fechamentos";
 import { PainelSistema } from "@/components/PainelSistema";
 import { StatusBadge } from "@/components/StatusBadge";
+import { dataLocalIso } from "@/lib/fechamento";
 
 const mocks = vi.hoisted(() => ({
   rpc: vi.fn().mockResolvedValue({ error: null }),
@@ -47,10 +49,50 @@ function clienteDeTeste(fila = filaTeste) {
   return qc;
 }
 
-function renderFila(fila = filaTeste) {
+function renderFila(
+  fila = filaTeste,
+  papel: "administrador" | "lavador" = "lavador",
+  preparar?: (qc: QueryClient) => void,
+) {
+  const qc = clienteDeTeste(fila);
+  preparar?.(qc);
   return render(
-    <QueryClientProvider client={clienteDeTeste(fila)}>
-      <FilaAtendimentos perfilId="lavador-teste" papel="lavador" />
+    <QueryClientProvider client={qc}>
+      <FilaAtendimentos perfilId="lavador-teste" papel={papel} />
+    </QueryClientProvider>,
+  );
+}
+
+function renderFechamentos(
+  papel: "administrador" | "lavador",
+  opcoes: {
+    atendimentos?: unknown[];
+    fechamento?: { id: string; status: string; confirmado_em: string | null } | null;
+    ajustes?: { id: string; valor: number }[];
+  } = {},
+) {
+  const qc = clienteDeTeste([]);
+  const hoje = dataLocalIso();
+  qc.setQueryData(
+    ["atendimentos-fechamento", hoje],
+    opcoes.atendimentos ?? [
+      {
+        id: "atendimento-entregue-teste",
+        entregue_em: `${hoje}T12:00:00-03:00`,
+        nome_cliente_snapshot: "Cliente de teste",
+        veiculo_snapshot: "Veículo de teste",
+        valor_final: 100,
+        valor_empresa_snapshot: 40,
+        total_pago: 100,
+        lavadores: [{ perfil_id: "lavador-teste", nome: "Lavador de teste", ordem_rateio: 1 }],
+      },
+    ],
+  );
+  qc.setQueryData(["fechamento-diario", hoje], opcoes.fechamento ?? null);
+  qc.setQueryData(["ajustes-repasse-pendentes", hoje], opcoes.ajustes ?? []);
+  return render(
+    <QueryClientProvider client={qc}>
+      <Fechamentos perfilId="lavador-teste" papel={papel} />
     </QueryClientProvider>,
   );
 }
@@ -123,7 +165,149 @@ describe("interface operacional", () => {
         }),
       ),
     );
+    expect(mocks.rpc.mock.calls[0]![1].p_veiculo).toMatchObject({ placa: null });
     expect(mocks.rpc.mock.calls[0]![1].p_veiculo).not.toHaveProperty("placa_normalizada");
+  });
+
+  it("reutiliza um entre múltiplos veículos e aceita valor informado", async () => {
+    renderFila([], "lavador", (qc) => {
+      qc.setQueryData(
+        ["busca-clientes", "Cliente existente"],
+        [{ id: "cliente-existente", nome_completo: "Cliente existente", telefone: "85988887777" }],
+      );
+      qc.setQueryData(
+        ["veiculos-cliente", "cliente-existente"],
+        [
+          {
+            id: "moto-sem-placa",
+            marca: "Honda",
+            modelo: "CG 160",
+            placa: null,
+            cor: "Vermelha",
+            categorias_veiculo: { nome: "Moto" },
+          },
+          {
+            id: "carro-com-placa",
+            marca: "Fiat",
+            modelo: "Argo",
+            placa: "ABC-1D23",
+            cor: "Prata",
+            categorias_veiculo: { nome: "Carro" },
+          },
+        ],
+      );
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Novo atendimento" }));
+    fireEvent.change(screen.getByLabelText("Buscar cliente por nome, telefone ou placa"), {
+      target: { value: "Cliente existente" },
+    });
+    fireEvent.click(await screen.findByRole("button", { name: /Cliente existente · 85988887777/ }));
+    expect(await screen.findByLabelText(/Honda CG 160 · Sem placa/)).toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText(/Fiat Argo · ABC-1D23/));
+    fireEvent.change(screen.getByLabelText("Serviço", { exact: true }), {
+      target: { value: "servico-teste" },
+    });
+    fireEvent.click(screen.getByLabelText("Lavador de teste", { exact: true }));
+    fireEvent.click(screen.getByLabelText("Informar valor depois"));
+    fireEvent.change(screen.getByLabelText("Valor final (R$)"), { target: { value: "89,90" } });
+    fireEvent.click(screen.getByRole("button", { name: "Registrar chegada" }));
+
+    await waitFor(() =>
+      expect(mocks.rpc).toHaveBeenCalledWith(
+        "rpc_criar_atendimento",
+        expect.objectContaining({
+          p_cliente_id: "cliente-existente",
+          p_cliente: null,
+          p_veiculo_id: "carro-com-placa",
+          p_veiculo: null,
+          p_valor_final: 89.9,
+        }),
+      ),
+    );
+  });
+
+  it("mostra a primeira mensagem de validação em linguagem simples", async () => {
+    renderFila([]);
+    fireEvent.click(screen.getByRole("button", { name: "Novo atendimento" }));
+    fireEvent.click(screen.getByRole("button", { name: /Cadastrar cliente/ }));
+    fireEvent.change(screen.getByLabelText("Serviço", { exact: true }), {
+      target: { value: "servico-teste" },
+    });
+    fireEvent.click(screen.getByLabelText("Lavador de teste", { exact: true }));
+    fireEvent.click(screen.getByRole("button", { name: "Registrar chegada" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Informe o nome do cliente.");
+    expect(screen.getByRole("alert")).not.toHaveTextContent("invalid_type");
+    expect(mocks.rpc).not.toHaveBeenCalled();
+  });
+
+  it("bloqueia dois envios rápidos do mesmo atendimento", async () => {
+    let concluir!: (resultado: { error: null }) => void;
+    mocks.rpc.mockReturnValueOnce(
+      new Promise<{ error: null }>((resolve) => {
+        concluir = resolve;
+      }),
+    );
+    renderFila([]);
+    fireEvent.click(screen.getByRole("button", { name: "Novo atendimento" }));
+    fireEvent.click(screen.getByRole("button", { name: /Cadastrar cliente/ }));
+    fireEvent.change(screen.getByLabelText("Nome", { exact: true }), {
+      target: { value: "Cliente de teste" },
+    });
+    fireEvent.change(screen.getByLabelText("Telefone"), { target: { value: "85999999999" } });
+    fireEvent.change(screen.getByLabelText("Categoria"), { target: { value: categoriaId } });
+    fireEvent.change(screen.getByLabelText("Marca", { exact: true }), {
+      target: { value: "Marca teste" },
+    });
+    fireEvent.change(screen.getByLabelText("Modelo", { exact: true }), {
+      target: { value: "Modelo teste" },
+    });
+    fireEvent.change(screen.getByLabelText("Serviço", { exact: true }), {
+      target: { value: "servico-teste" },
+    });
+    fireEvent.click(screen.getByLabelText("Lavador de teste", { exact: true }));
+    const formulario = screen.getByRole("form", { name: "Registrar chegada" });
+    fireEvent.submit(formulario);
+    fireEvent.submit(formulario);
+
+    await waitFor(() => expect(mocks.rpc).toHaveBeenCalledTimes(1));
+    concluir({ error: null });
+  });
+
+  it("exige motivo suficiente antes de cancelar", async () => {
+    renderFila();
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+    fireEvent.change(screen.getByLabelText("Motivo"), { target: { value: "x" } });
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("motivo do cancelamento");
+    expect(mocks.rpc).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByLabelText("Motivo"), {
+      target: { value: "Cliente desistiu do serviço" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
+    await waitFor(() =>
+      expect(mocks.rpc).toHaveBeenCalledWith(
+        "rpc_avancar_atendimento",
+        expect.objectContaining({
+          p_novo_status: "cancelado",
+          p_motivo: "Cliente desistiu do serviço",
+        }),
+      ),
+    );
+  });
+
+  it.each([
+    ["lavador", false],
+    ["administrador", true],
+  ] as const)("respeita a correção de participantes para %s", (papel, podeCorrigir) => {
+    renderFila([{ ...filaTeste[0]!, lavadores: [] }], papel);
+    expect(screen.getByRole("button", { name: "Novo atendimento" })).toBeInTheDocument();
+    if (podeCorrigir) {
+      expect(screen.getByRole("button", { name: "Corrigir lavadores" })).toBeInTheDocument();
+    } else {
+      expect(screen.queryByRole("button", { name: "Corrigir lavadores" })).not.toBeInTheDocument();
+    }
   });
 
   it("abre diálogo de entrega com campos rotulados e restaura foco ao fechar", async () => {
@@ -163,6 +347,146 @@ describe("interface operacional", () => {
         }),
       ),
     );
+  });
+
+  it("registra pagamento dividido com centavos e mostra a conferência", async () => {
+    renderFila([{ ...filaTeste[0]!, valor_final: 100.03 }]);
+    fireEvent.click(screen.getByRole("button", { name: "Registrar entrega" }));
+    fireEvent.change(screen.getByLabelText("Valor (R$)", { exact: true }), {
+      target: { value: "60,01" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Dividir pagamento/ }));
+    const valores = screen.getAllByLabelText("Valor (R$)", { exact: true });
+    fireEvent.change(valores[1]!, { target: { value: "40,02" } });
+    fireEvent.change(screen.getByLabelText("Forma 2"), { target: { value: "dinheiro" } });
+
+    expect(screen.getByText(/Total informado: R\$ 100,03.*Valor conferido/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
+
+    await waitFor(() =>
+      expect(mocks.rpc).toHaveBeenCalledWith("rpc_avancar_atendimento", {
+        p_atendimento_id: "atendimento-teste",
+        p_novo_status: "entregue",
+        p_motivo: null,
+        p_valor_final: 100.03,
+        p_pagamentos: [
+          { forma_pagamento: "pix", valor_centavos: 6001 },
+          { forma_pagamento: "dinheiro", valor_centavos: 4002 },
+        ],
+      }),
+    );
+  });
+
+  it("não substitui pagamentos ao avançar uma etapa sem entrega", async () => {
+    renderFila([{ ...filaTeste[0]!, status: "em_lavagem", valor_final: 100 }]);
+    fireEvent.click(screen.getByRole("button", { name: "Marcar como pronto" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
+    await waitFor(() =>
+      expect(mocks.rpc).toHaveBeenCalledWith(
+        "rpc_avancar_atendimento",
+        expect.objectContaining({
+          p_novo_status: "pronto_para_retirada",
+          p_pagamentos: null,
+        }),
+      ),
+    );
+  });
+
+  it("bloqueia dois cliques rápidos ao registrar a entrega", async () => {
+    let concluir!: (resultado: { error: null }) => void;
+    mocks.rpc.mockReturnValueOnce(
+      new Promise<{ error: null }>((resolve) => {
+        concluir = resolve;
+      }),
+    );
+    renderFila();
+    fireEvent.click(screen.getByRole("button", { name: "Registrar entrega" }));
+    const confirmar = screen.getByRole("button", { name: "Confirmar" });
+    fireEvent.click(confirmar);
+    fireEvent.click(confirmar);
+
+    await waitFor(() => expect(mocks.rpc).toHaveBeenCalledTimes(1));
+    concluir({ error: null });
+  });
+
+  it.each([
+    ["administrador", true],
+    ["lavador", false],
+  ] as const)("restringe a correção financeira entregue para %s", (papel, podeCorrigir) => {
+    renderFechamentos(papel);
+    if (podeCorrigir) {
+      expect(screen.getByRole("button", { name: "Corrigir" })).toBeInTheDocument();
+    } else {
+      expect(screen.queryByRole("button", { name: "Corrigir" })).not.toBeInTheDocument();
+    }
+  });
+
+  it("impede correção administrativa com valor final zero", async () => {
+    vi.spyOn(window, "prompt")
+      .mockReturnValueOnce("0")
+      .mockReturnValueOnce("pix")
+      .mockReturnValueOnce("Ajuste financeiro de teste");
+    renderFechamentos("administrador");
+    fireEvent.click(screen.getByRole("button", { name: "Corrigir" }));
+
+    expect(await screen.findByRole("status")).toHaveTextContent("maior que zero");
+    expect(mocks.rpc).not.toHaveBeenCalled();
+  });
+
+  it("não tenta fechar novamente uma data já confirmada", () => {
+    renderFechamentos("administrador", {
+      fechamento: {
+        id: "fechamento-teste",
+        status: "confirmado",
+        confirmado_em: "2026-10-02T18:00:00-03:00",
+      },
+    });
+
+    expect(screen.getByRole("button", { name: "Fechamento confirmado" })).toBeDisabled();
+    expect(screen.getByRole("status")).toHaveTextContent("já confirmado");
+    expect(mocks.rpc).not.toHaveBeenCalled();
+  });
+
+  it("bloqueia dois cliques rápidos no fechamento diário", async () => {
+    let concluir!: (resultado: { data: string; error: null }) => void;
+    mocks.rpc.mockReturnValueOnce(
+      new Promise<{ data: string; error: null }>((resolve) => {
+        concluir = resolve;
+      }),
+    );
+    renderFechamentos("administrador");
+    const confirmar = screen.getByRole("button", { name: "Confirmar fechamento" });
+    fireEvent.click(confirmar);
+    fireEvent.click(confirmar);
+
+    await waitFor(() => expect(mocks.rpc).toHaveBeenCalledTimes(1));
+    concluir({ data: "fechamento-teste", error: null });
+  });
+
+  it("permite fechamento contendo somente ajuste auditado", async () => {
+    mocks.rpc.mockResolvedValueOnce({ data: "fechamento-ajuste", error: null });
+    renderFechamentos("administrador", {
+      atendimentos: [],
+      ajustes: [{ id: "ajuste-teste", valor: 1 }],
+    });
+
+    expect(screen.getByText("1 · R$ 1,00")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar fechamento" }));
+    await waitFor(() =>
+      expect(mocks.rpc).toHaveBeenCalledWith("rpc_fechar_repasses_dia", {
+        p_data_operacao: expect.any(String),
+        p_atendimentos_pendentes: [],
+        p_observacoes: null,
+      }),
+    );
+  });
+
+  it("não cria fechamento vazio quando todos os atendimentos ficam pendentes", () => {
+    renderFechamentos("administrador");
+    fireEvent.click(
+      screen.getByLabelText("Deixar atendimento de Cliente de teste para outro fechamento"),
+    );
+    expect(screen.getByRole("button", { name: "Confirmar fechamento" })).toBeDisabled();
   });
 
   it("mantém a navegação do lavador sem ações administrativas", async () => {

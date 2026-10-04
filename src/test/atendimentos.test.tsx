@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { montarParametrosNovoAtendimento, prepararBuscaCliente } from "@/lib/atendimento";
 import { montarPayloadNovoVeiculo } from "@/lib/veiculo";
 
 describe("cadastro de veículo", () => {
@@ -32,5 +33,97 @@ describe("cadastro de veículo", () => {
 
     expect(payload.placa).toBeNull();
     expect(payload).not.toHaveProperty("placa_normalizada");
+  });
+});
+
+describe("payload do novo atendimento", () => {
+  const base = {
+    servicoId: "servico-teste",
+    lavadores: ["lavador-1", "lavador-2", "lavador-1"],
+    clienteId: null,
+    clienteNovo: { nome_completo: " Cliente de teste ", telefone: " 85999999999 " },
+    veiculoId: null,
+    veiculoNovo: {
+      categoria_veiculo_id: "d5319fa3-36ef-4f7d-a5ae-4f5399ea0e18",
+      marca: " Honda ",
+      modelo: " CG 160 ",
+      placa: "",
+      cor: "",
+      observacoes: "",
+    },
+    valorDepois: true,
+    valor: "",
+    observacoes: "",
+  };
+
+  it("mantém valor pendente, placa opcional e participantes únicos", () => {
+    const parametros = montarParametrosNovoAtendimento(base);
+
+    expect(parametros).toMatchObject({
+      p_servico_id: "servico-teste",
+      p_lavadores: ["lavador-1", "lavador-2"],
+      p_cliente_id: null,
+      p_cliente: { nome_completo: "Cliente de teste", telefone: "85999999999" },
+      p_veiculo_id: null,
+      p_veiculo: {
+        marca: "Honda",
+        modelo: "CG 160",
+        placa: null,
+        cor: null,
+        observacoes: null,
+      },
+      p_valor_final: null,
+      p_observacoes: null,
+    });
+    expect(parametros.p_veiculo).not.toHaveProperty("placa_normalizada");
+  });
+
+  it("normaliza placa e valor informado sem perder centavos", () => {
+    const parametros = montarParametrosNovoAtendimento({
+      ...base,
+      valorDepois: false,
+      valor: "89,90",
+      veiculoNovo: { ...base.veiculoNovo, placa: " abc-1d23 " },
+    });
+
+    expect(parametros.p_valor_final).toBe(89.9);
+    expect(parametros.p_veiculo?.placa).toBe("ABC-1D23");
+  });
+
+  it.each(["", "0", "0,00"])('rejeita valor informado inválido: "%s"', (valor) => {
+    expect(() => montarParametrosNovoAtendimento({ ...base, valorDepois: false, valor })).toThrow(
+      /maior que zero|monetário válido/,
+    );
+  });
+
+  it("reutiliza cliente e veículo existentes sem recriar registros", () => {
+    const parametros = montarParametrosNovoAtendimento({
+      ...base,
+      clienteId: "cliente-existente",
+      clienteNovo: null,
+      veiculoId: "veiculo-existente",
+      veiculoNovo: null,
+    });
+
+    expect(parametros.p_cliente_id).toBe("cliente-existente");
+    expect(parametros.p_cliente).toBeNull();
+    expect(parametros.p_veiculo_id).toBe("veiculo-existente");
+    expect(parametros.p_veiculo).toBeNull();
+  });
+});
+
+describe("busca de cliente e veículo", () => {
+  it("normaliza a placa de busca sem alterar o termo exibido", () => {
+    expect(prepararBuscaCliente(" abc-1d23 ")).toEqual({
+      termo: "abc-1d23",
+      placa: "ABC1D23",
+    });
+  });
+
+  it("remove caracteres reservados do filtro PostgREST", () => {
+    expect(prepararBuscaCliente("Cliente%,(Teste)")).toEqual({
+      termo: "ClienteTeste",
+      placa: "CLIENTETESTE",
+    });
   });
 });

@@ -9,6 +9,9 @@ export function mensagemErro(erro: unknown) {
   const codigo = (erro as { code?: string })?.code ?? "";
   if (codigo === "23505" && /placa/i.test(mensagem))
     return "Já existe um veículo cadastrado com esta placa.";
+  if (codigo === "23505" && /fechamentos_diarios_data_operacao_key|data_operacao/i.test(mensagem)) {
+    return "O fechamento desta data já foi confirmado.";
+  }
   if (/row-level security|permission|42501/i.test(`${codigo} ${mensagem}`)) {
     return "Você não tem permissão para realizar esta ação.";
   }

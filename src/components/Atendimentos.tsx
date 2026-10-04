@@ -12,13 +12,15 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { z } from "zod";
 
 import type { Papel } from "@/lib/acesso";
+import { montarParametrosNovoAtendimento, prepararBuscaCliente } from "@/lib/atendimento";
 import {
   proximoStatus,
   reaisParaCentavos,
+  somaPagamentosCentavos,
   type PagamentoEntrada,
   type StatusAtendimento,
   validarEntrega,
@@ -287,6 +289,7 @@ function NovoAtendimento({ perfilId, onFechar }: { perfilId: string; onFechar: (
   const [valor, setValor] = useState("");
   const [observacoes, setObservacoes] = useState("");
   const [erro, setErro] = useState<string | null>(null);
+  const enviando = useRef(false);
   void perfilId;
 
   useEffect(() => {
@@ -297,8 +300,7 @@ function NovoAtendimento({ perfilId, onFechar }: { perfilId: string; onFechar: (
     queryKey: ["busca-clientes", buscaDeb],
     enabled: buscaDeb.length >= 2 && !cliente,
     queryFn: async () => {
-      const termo = buscaDeb.replace(/[%(),]/g, "");
-      const placa = termo.replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
+      const { termo, placa } = prepararBuscaCliente(buscaDeb);
       const [porCliente, porPlaca] = await Promise.all([
         db()
           .from("clientes")
@@ -380,31 +382,40 @@ function NovoAtendimento({ perfilId, onFechar }: { perfilId: string; onFechar: (
     mutationFn: async () => {
       const clienteNovo = cliente ? null : clienteSchema.parse(dadosCliente);
       const veiculoNovo = novoVeiculo || !veiculoId ? veiculoSchema.parse(veiculo) : null;
-      const valorFinal = valorDepois ? null : reaisParaCentavos(valor) / 100;
-      const { error } = await db().rpc("rpc_criar_atendimento", {
-        p_servico_id: servicoId,
-        p_lavadores: lavadores,
-        p_cliente_id: cliente?.id ?? null,
-        p_cliente: clienteNovo,
-        p_veiculo_id: veiculoNovo ? null : veiculoId,
-        p_veiculo: veiculoNovo,
-        p_valor_final: valorFinal,
-        p_observacoes: observacoes.trim() || null,
+      const parametros = montarParametrosNovoAtendimento({
+        servicoId,
+        lavadores,
+        clienteId: cliente?.id ?? null,
+        clienteNovo,
+        veiculoId: veiculoNovo ? null : veiculoId,
+        veiculoNovo,
+        valorDepois,
+        valor,
+        observacoes,
       });
+      const { error } = await db().rpc("rpc_criar_atendimento", parametros);
       if (error) throw error;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["fila-atendimentos"] });
       onFechar();
     },
-    onError: (e) => setErro(mensagemErro(e)),
+    onError: (e) =>
+      setErro(
+        e instanceof z.ZodError ? (e.issues[0]?.message ?? "Dados inválidos.") : mensagemErro(e),
+      ),
+    onSettled: () => {
+      enviando.current = false;
+    },
   });
   function enviar(e: FormEvent) {
     e.preventDefault();
+    if (enviando.current || salvar.isPending) return;
     setErro(null);
     if (!cliente && !novoCliente) return setErro("Selecione ou cadastre um cliente.");
     if (!servicoId) return setErro("Selecione o serviço.");
     if (!lavadores.length) return setErro("Selecione pelo menos um lavador.");
+    enviando.current = true;
     salvar.mutate();
   }
   const alternarLavador = (id: string) =>
@@ -563,7 +574,7 @@ function NovoAtendimento({ perfilId, onFechar }: { perfilId: string; onFechar: (
                     onChange={() => setVeiculoId(v.id)}
                   />
                   {v.marca} {v.modelo}
-                  {v.placa ? ` · ${v.placa}` : ""} ({v.categorias_veiculo?.nome})
+                  {v.placa ? ` · ${v.placa}` : " · Sem placa"} ({v.categorias_veiculo?.nome})
                 </label>
               ))}
               <Button
@@ -722,7 +733,12 @@ function NovoAtendimento({ perfilId, onFechar }: { perfilId: string; onFechar: (
           {erro}
         </p>
       )}
-      <Button disabled={salvar.isPending} aria-busy={salvar.isPending} className="w-full">
+      <Button
+        type="submit"
+        disabled={salvar.isPending}
+        aria-busy={salvar.isPending}
+        className="w-full"
+      >
         {salvar.isPending ? (
           <LoaderCircle className="animate-spin" aria-hidden="true" />
         ) : (
@@ -756,8 +772,11 @@ function AcaoAtendimento({
   const [valor, setValor] = useState(
     item.valor_final == null ? "" : String(item.valor_final).replace(".", ","),
   );
-  const [pagamentos, setPagamentos] = useState([{ forma_pagamento: "pix", valor: valor }]);
+  const [pagamentos, setPagamentos] = useState<
+    { forma_pagamento: PagamentoEntrada["forma_pagamento"]; valor: string }[]
+  >([{ forma_pagamento: "pix", valor }]);
   const [erro, setErro] = useState<string | null>(null);
+  const salvandoRef = useRef(false);
   const [lavadores, setLavadores] = useState<string[]>(item.lavadores.map((l) => l.perfil_id));
   const opcoesLavadores = useQuery({
     queryKey: ["lavadores-ativos"],
@@ -789,15 +808,16 @@ function AcaoAtendimento({
       if (!destino) throw new Error("Transição inválida.");
       if (cancelando && motivo.trim().length < 3)
         throw new Error("Informe o motivo do cancelamento.");
-      let lista: PagamentoEntrada[] = [];
+      let lista: PagamentoEntrada[] | null = null;
       let valorFinal = item.valor_final;
       if (destino === "entregue") {
-        valorFinal = reaisParaCentavos(valor) / 100;
+        const valorFinalCentavos = reaisParaCentavos(valor);
+        valorFinal = valorFinalCentavos / 100;
         lista = pagamentos.map((p) => ({
-          forma_pagamento: p.forma_pagamento as PagamentoEntrada["forma_pagamento"],
+          forma_pagamento: p.forma_pagamento,
           valor_centavos: reaisParaCentavos(p.valor),
         }));
-        const validacao = validarEntrega(reaisParaCentavos(valor), item.lavadores.length, lista);
+        const validacao = validarEntrega(valorFinalCentavos, item.lavadores.length, lista);
         if (validacao) throw new Error(validacao);
       }
       const { error } = await db().rpc("rpc_avancar_atendimento", {
@@ -813,6 +833,31 @@ function AcaoAtendimento({
     onError: (e) => setErro(mensagemErro(e)),
   });
   const entrega = destino === "entregue";
+  const resumoPagamento = (() => {
+    if (!entrega) return null;
+    try {
+      const valorFinalCentavos = reaisParaCentavos(valor);
+      const totalCentavos = somaPagamentosCentavos(
+        pagamentos.map((pagamento) => ({
+          forma_pagamento: pagamento.forma_pagamento,
+          valor_centavos: reaisParaCentavos(pagamento.valor),
+        })),
+      );
+      return { valorFinalCentavos, totalCentavos };
+    } catch {
+      return null;
+    }
+  })();
+  const confirmar = () => {
+    if (salvandoRef.current) return;
+    salvandoRef.current = true;
+    setErro(null);
+    salvar.mutate(undefined, {
+      onSettled: () => {
+        salvandoRef.current = false;
+      },
+    });
+  };
   return (
     <Dialog
       open
@@ -896,7 +941,13 @@ function AcaoAtendimento({
                       onChange={(e) =>
                         setPagamentos((lista) =>
                           lista.map((x, n) =>
-                            n === i ? { ...x, forma_pagamento: e.target.value } : x,
+                            n === i
+                              ? {
+                                  ...x,
+                                  forma_pagamento: e.target
+                                    .value as PagamentoEntrada["forma_pagamento"],
+                                }
+                              : x,
                           ),
                         )
                       }
@@ -932,6 +983,7 @@ function AcaoAtendimento({
                   </label>
                   {pagamentos.length > 1 && (
                     <Button
+                      type="button"
                       variant="outline"
                       className="col-span-2 text-destructive"
                       aria-label={`Remover pagamento ${i + 1}`}
@@ -943,6 +995,7 @@ function AcaoAtendimento({
                 </div>
               ))}
               <Button
+                type="button"
                 variant="outline"
                 className="text-sm text-primary"
                 onClick={() =>
@@ -951,6 +1004,22 @@ function AcaoAtendimento({
               >
                 + Dividir pagamento
               </Button>
+              {resumoPagamento && (
+                <p className="text-sm text-muted-foreground" aria-live="polite">
+                  Total informado: {formatarDinheiro(resumoPagamento.totalCentavos / 100)} ·{" "}
+                  {resumoPagamento.totalCentavos === resumoPagamento.valorFinalCentavos
+                    ? "Valor conferido"
+                    : resumoPagamento.totalCentavos < resumoPagamento.valorFinalCentavos
+                      ? `Falta ${formatarDinheiro(
+                          (resumoPagamento.valorFinalCentavos - resumoPagamento.totalCentavos) /
+                            100,
+                        )}`
+                      : `Excede ${formatarDinheiro(
+                          (resumoPagamento.totalCentavos - resumoPagamento.valorFinalCentavos) /
+                            100,
+                        )}`}
+                </p>
+              )}
             </fieldset>
           </>
         )}
@@ -960,10 +1029,11 @@ function AcaoAtendimento({
           </p>
         )}
         <Button
+          type="button"
           disabled={salvar.isPending}
           aria-busy={salvar.isPending}
           className="w-full"
-          onClick={() => salvar.mutate()}
+          onClick={confirmar}
         >
           {salvar.isPending ? "Salvando..." : "Confirmar"}
         </Button>

@@ -1,4 +1,55 @@
-import type { createClient as criarClienteSupabase } from "https://esm.sh/@supabase/supabase-js@2";
+type OpcoesClienteSupabase = {
+  global?: { headers: Record<string, string> };
+  auth: { autoRefreshToken: false; persistSession: false };
+};
+
+type CriarClienteSupabase = (url: string, chave: string, opcoes: OpcoesClienteSupabase) => unknown;
+
+type ErroAutenticacao = { status?: number; code?: string };
+type Resultado<T, E = unknown> = { data: T; error: E | null };
+
+type ClienteUsuario = {
+  auth: {
+    getUser: (
+      token: string,
+    ) => Promise<Resultado<{ user: { id: string } | null }, ErroAutenticacao>>;
+  };
+  rpc: (nome: string) => Promise<Resultado<boolean | null>>;
+};
+
+type ResultadoPerfil = Resultado<{ id: string }>;
+type Insercao = PromiseLike<{ error: unknown | null }> & {
+  select: (colunas: string) => { single: () => PromiseLike<ResultadoPerfil> };
+};
+type TabelaAdministrativa = {
+  select: (colunas: string) => {
+    eq: (
+      coluna: string,
+      valor: string,
+    ) => { maybeSingle: () => PromiseLike<Resultado<{ id: string } | null>> };
+  };
+  insert: (valores: Record<string, unknown>) => Insercao;
+  update: (valores: Record<string, unknown>) => {
+    eq: (
+      coluna: string,
+      valor: string,
+    ) => { select: (colunas: string) => { single: () => PromiseLike<ResultadoPerfil> } };
+  };
+  delete: () => {
+    eq: (coluna: string, valor: string) => PromiseLike<{ error: unknown | null }>;
+  };
+};
+type ClienteAdministrativo = {
+  auth: {
+    admin: {
+      inviteUserByEmail: (
+        email: string,
+        opcoes: { data: Record<string, unknown>; redirectTo?: string },
+      ) => Promise<Resultado<{ user: { id: string } | null }, ErroAutenticacao>>;
+    };
+  };
+  from: (tabela: string) => TabelaAdministrativa;
+};
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -10,7 +61,7 @@ export function criarHandlerConvite({
   createClient,
   getEnv,
 }: {
-  createClient: typeof criarClienteSupabase;
+  createClient: CriarClienteSupabase;
   getEnv: (nome: string) => string | undefined;
 }) {
   return async function atenderConvite(request: Request) {
@@ -31,7 +82,7 @@ export function criarHandlerConvite({
       const usuarioClient = createClient(supabaseUrl, anonKey, {
         global: { headers: { Authorization: `Bearer ${token}` } },
         auth: { autoRefreshToken: false, persistSession: false },
-      });
+      }) as ClienteUsuario;
       const { data: autenticacao, error: autenticacaoErro } =
         await usuarioClient.auth.getUser(token);
       if (autenticacaoErro) {
@@ -73,13 +124,16 @@ export function criarHandlerConvite({
           : null;
       const admin = createClient(supabaseUrl, serviceRoleKey, {
         auth: { autoRefreshToken: false, persistSession: false },
-      });
+      }) as ClienteAdministrativo;
+      const redirectTo = criarUrlDefinicaoSenha(request.headers.get("Origin"));
       const { data, error } = await admin.auth.admin.inviteUserByEmail(entrada.email.trim(), {
         data: {
           nome_completo: entrada.nome_completo.trim(),
           telefone,
           papel: entrada.papel,
+          primeiro_acesso_pendente: true,
         },
+        ...(redirectTo ? { redirectTo } : {}),
       });
       if (error) {
         if (
@@ -142,6 +196,18 @@ export function criarHandlerConvite({
       );
     }
   };
+}
+
+function criarUrlDefinicaoSenha(origem: string | null) {
+  if (!origem) return undefined;
+  try {
+    const url = new URL(origem);
+    const local = url.hostname === "localhost" || url.hostname === "127.0.0.1";
+    if (url.protocol !== "https:" && !(local && url.protocol === "http:")) return undefined;
+    return new URL("/definir-senha?origem=convite", url.origin).toString();
+  } catch {
+    return undefined;
+  }
 }
 
 function resposta(corpo: unknown, status: number, headers: Record<string, string> = {}) {

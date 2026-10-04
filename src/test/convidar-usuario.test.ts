@@ -61,12 +61,14 @@ function preparar(existente = false) {
 function requisicao(
   body: unknown = corpoValido,
   authorization: string | null = "Bearer jwt-simulado",
+  origin: string | null = "https://app.teste.invalid",
 ) {
   return new Request("https://teste.invalid/convidar-usuario", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       ...(authorization ? { Authorization: authorization } : {}),
+      ...(origin ? { Origin: origin } : {}),
     },
     body: JSON.stringify(body),
   });
@@ -232,10 +234,27 @@ describe("contrato HTTP da função de convite (Supabase simulado)", () => {
     expect(body).toEqual({ usuario_id: "auth-teste", perfil_id: "perfil-teste" });
     expect(m.createClient).toHaveBeenCalledTimes(2);
     expect(m.invite).toHaveBeenCalledWith(corpoValido.email, {
-      data: { nome_completo: corpoValido.nome_completo, telefone: null, papel: "lavador" },
+      data: {
+        nome_completo: corpoValido.nome_completo,
+        telefone: null,
+        papel: "lavador",
+        primeiro_acesso_pendente: true,
+      },
+      redirectTo: "https://app.teste.invalid/definir-senha?origem=convite",
     });
     expect(existente ? m.atualizar : m.inserir).toHaveBeenCalledTimes(1);
     expect(m.papel).toHaveBeenCalledWith({ perfil_id: "perfil-teste", papel: "lavador" });
+  });
+
+  it("não repassa origem HTTP externa como redirecionamento do convite", async () => {
+    const m = preparar();
+    await conferir(
+      await m.handler(requisicao(corpoValido, "Bearer jwt-simulado", "http://app.teste.invalid")),
+      200,
+    );
+    expect(m.invite).toHaveBeenCalledWith(corpoValido.email, {
+      data: expect.objectContaining({ primeiro_acesso_pendente: true }),
+    });
   });
 
   it.each(["buscar", "salvar", "remover", "papel"] as const)(
@@ -253,9 +272,26 @@ describe("contrato HTTP da função de convite (Supabase simulado)", () => {
     await conferir(await m.handler(requisicao()), 500);
   });
 
-  it("mantém o projeto e a verificação JWT na configuração central", () => {
-    const config = readFileSync("supabase/config.toml", "utf8");
-    expect(config).toMatch(/^project_id = "jkhfhyrwkwzpoteenkyh"/);
-    expect(config).toMatch(/\[functions\.convidar-usuario\]\s+verify_jwt = true/);
+  it("mantém o projeto e a verificação JWT nas configurações da função", () => {
+    const configCentral = readFileSync("supabase/config.toml", "utf8");
+    const configLocal = readFileSync("supabase/functions/convidar-usuario/config.toml", "utf8");
+    expect(configCentral).toMatch(/^project_id = "jkhfhyrwkwzpoteenkyh"/);
+    expect(configCentral).toMatch(/\[functions\.convidar-usuario\]\s+verify_jwt = true/);
+    expect(configLocal).toMatch(/^verify_jwt = true\s*$/);
+  });
+
+  it("mantém a chave administrativa somente no código de servidor", () => {
+    const handler = readFileSync("supabase/functions/convidar-usuario/handler.ts", "utf8");
+    const interfaceUsuarios = readFileSync("src/components/Usuarios.tsx", "utf8");
+    const clientePublico = readFileSync("src/integrations/supabase/client.ts", "utf8");
+    const nomesNoEnv = readFileSync(".env", "utf8")
+      .split(/\r?\n/)
+      .map((linha) => linha.split("=", 1)[0]?.trim())
+      .filter(Boolean);
+
+    expect(handler).toContain('getEnv("SUPABASE_SERVICE_ROLE_KEY")');
+    expect(interfaceUsuarios).not.toMatch(/SUPABASE_SERVICE_ROLE_KEY|service_role/i);
+    expect(clientePublico).not.toMatch(/SUPABASE_SERVICE_ROLE_KEY|service_role/i);
+    expect(nomesNoEnv).not.toContain("SUPABASE_SERVICE_ROLE_KEY");
   });
 });

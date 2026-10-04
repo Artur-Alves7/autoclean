@@ -2,11 +2,10 @@
 
 ## Estado da entrega
 
-Base consultada em 02/10/2026: `main`, commit
-`a9dbbf2a88b127462420f60d236d0549894911d8`.
-Antes da edição, os hashes dos 106 arquivos versionados locais correspondiam
-à árvore desse commit. A cópia de trabalho é uma exportação sem diretório
-`.git`; não há branch local, commit novo ou push desta revisão.
+Revisão atualizada em 02/10/2026 na branch local
+`codex/etapa-1-auditoria`, após o commit de auditoria `abdf106`. A base da
+branch corresponde à `main` no commit `cad6776` e na árvore Git
+`0cbb2bc3fee85113d0acde2b6f753d400631920f`.
 
 Esta revisão não aplica SQL, não altera migrations, não publica o front-end,
 não faz deploy e não cria dados em produção.
@@ -16,15 +15,18 @@ Arquivos da revisão:
 - `supabase/functions/convidar-usuario/index.ts`: inicialização do runtime e
   composição do handler, mantendo a chave administrativa no servidor.
 - `supabase/functions/convidar-usuario/handler.ts`: lógica existente de convite,
-  agora testável, com CORS, validação explícita da sessão e respostas HTTP.
+  com CORS, validação explícita da sessão, respostas HTTP e contratos locais de
+  tipo compatíveis com o TypeScript do front-end e com o runtime Deno.
 - `supabase/config.toml`: seção `[functions.convidar-usuario]` com
   `verify_jwt = true`; `project_id` preservado.
-- `src/test/convidar-usuario.test.ts`: testes do handler com dependências simuladas.
+- `supabase/functions/convidar-usuario/config.toml`: verificação JWT explícita
+  também na configuração local da função.
+- `src/test/convidar-usuario.test.ts`: testes do handler, das duas configurações
+  JWT e da separação da chave administrativa.
 - `docs/validacao-convite.md`: este roteiro.
 
-O arquivo antigo `supabase/functions/convidar-usuario/config.toml` foi preservado.
-A configuração por função que deve acompanhar a CLI está no arquivo central
-`supabase/config.toml`.
+A configuração central é a referência usada pela CLI do projeto. A configuração
+local foi preservada por compatibilidade; ambas exigem `verify_jwt = true`.
 
 ## Contrato HTTP
 
@@ -58,6 +60,7 @@ Na raiz do projeto, com dependências instaladas:
 ```sh
 pnpm test
 pnpm exec eslint supabase/functions/convidar-usuario/index.ts supabase/functions/convidar-usuario/handler.ts src/test/convidar-usuario.test.ts
+pnpm exec tsc --noEmit
 pnpm build
 ```
 
@@ -70,46 +73,57 @@ runtime Deno hospedado. O build do front-end também não faz essa validação.
 
 Resultado executado nesta revisão:
 
-- 4 arquivos de testes passaram, com 45 testes (37 novos e 8 existentes).
-- ESLint dos três arquivos TypeScript alterados/adicionados: passou, sem erros.
+- teste direcionado da função: 38 testes aprovados;
+- suíte completa: 5 arquivos e 52 testes aprovados;
+- ESLint dos três arquivos TypeScript da etapa: passou, sem erros;
+- `tsc --noEmit`: passou após remover do handler o import remoto usado somente
+  para tipagem;
 - Build Vite/Nitro: passou. Permanecem avisos de chunk maior que 500 kB,
   resolução de caminhos e opção de divisão de código do empacotador.
-- Lint global não foi executado nesta revisão; o resultado acima é direcionado.
-- Nenhuma chamada à função em produção nem teste com login real foi executado.
+- O nome da variável `SUPABASE_SERVICE_ROLE_KEY` não aparece no bundle público,
+  no cliente Supabase do navegador nem no componente de usuários; seu uso pela
+  função continua restrito ao código de servidor.
+- O lint global continua com as falhas preexistentes registradas em
+  `docs/auditoria-estado-atual.md`; elas não pertencem à função de convite.
+- Nenhum convite real foi enviado e nenhum teste com login real foi executado.
 
-## Enviar à main — ação manual
+## Commit e envio — ações separadas
 
-1. Use um clone Git autenticado do repositório conectado ao Lovable. Se ainda
-   não tiver um, clone `https://github.com/Artur-Alves7/lavaclean.git`.
-2. Verifique alterações locais antes de atualizar; preserve trabalho não relacionado.
-3. Execute:
+Esta etapa deve permanecer em um commit próprio na branch de trabalho. Antes do
+commit local, execute:
 
 ```sh
 git status --short
-git switch main
-git pull --ff-only origin main
-git rev-parse HEAD
-```
-
-4. Se a main tiver avançado desde o commit-base acima, compare as mudanças
-   antes de copiar os cinco arquivos desta revisão. Não sobrescreva alterações
-   posteriores. Copie somente os cinco arquivos listados, preservando seus caminhos.
-5. Rode os testes, lint direcionado e build acima. Revise o diff e envie:
-
-```sh
 git diff --check
 git diff --stat
-git add supabase/functions/convidar-usuario/index.ts supabase/functions/convidar-usuario/handler.ts supabase/config.toml src/test/convidar-usuario.test.ts docs/validacao-convite.md
 git diff --cached
-git commit -m "Corrige CORS e respostas HTTP do convite de usuários"
-git push origin main
 ```
 
-Não inclua `.env`, dependências nem arquivos de build. Não use force push.
+Não houve push nesta etapa. Quando houver autorização explícita, envie a branch
+sem force push e integre-a à `main` preservando um commit por etapa. Não inclua
+`.env`, dependências, arquivos de build, tokens ou chaves administrativas.
+
+## Estado observado no Supabase Cloud
+
+Em 02/10/2026 foram realizadas somente duas chamadas sem credenciais e sem
+efeito sobre dados:
+
+- `OPTIONS` respondeu `204` pelo Supabase Edge Runtime e incluiu
+  `Access-Control-Allow-Origin: *`, os quatro cabeçalhos permitidos e
+  `Access-Control-Allow-Methods: POST, OPTIONS`;
+- `POST` com corpo vazio e sem `Authorization` respondeu `401` no gateway, com
+  o código público `UNAUTHORIZED_NO_AUTH_HEADER`.
+
+Essas evidências confirmam que a função está publicada, que o preflight com os
+cabeçalhos revisados está ativo e que o gateway exige JWT. Elas não comprovam
+os caminhos autenticados de administrador/lavador, a entrega de e-mail, a
+presença dos secrets ou a persistência de perfil e papel. Nenhuma chave, token,
+sessão ou cookie foi registrado neste documento.
 
 ## Redeploy no Supabase — ação manual
 
-Depois de revisar e enviar o commit, use a CLI autenticada na raiz do clone:
+Esta etapa não fez redeploy. Quando houver autorização explícita e o commit já
+estiver integrado ao repositório, use a CLI autenticada na raiz do clone:
 
 ```sh
 supabase functions deploy convidar-usuario --project-ref jkhfhyrwkwzpoteenkyh
@@ -164,9 +178,9 @@ execute apenas quando decidir fazê-lo, manualmente.
 - [ ] Aceitação: abrir o e-mail numa sessão separada, aceitar o convite e
       confirmar entrada na área de lavador. Conferir o Site URL/redirecionamento
       do Auth se o link não voltar à aplicação. Testar também sair e entrar novamente.
-      A versão atual não contém tela explícita para definir/redefinir senha;
-      se o primeiro acesso ou o login posterior depender dela, registrar essa
-      pendência, sem marcar o fluxo como concluído.
+      O roteiro detalhado de definição e recuperação de senha está em
+      `docs/validacao-acesso-inicial.md`; não marcar o fluxo como concluído sem
+      percorrê-lo com um convite e uma caixa de e-mail de teste reais.
 - [ ] Lavador: cadastrar cliente e veículo fictícios, testar placa vazia e placa
       válida, criar atendimento com preço pendente e associar dois participantes.
       Confirmar ausência de duplicação e de erro em placa_normalizada.
