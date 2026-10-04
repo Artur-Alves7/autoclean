@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { FilaAtendimentos } from "@/components/Atendimentos";
 import { ClientesVeiculos } from "@/components/ClientesVeiculos";
 import { Fechamentos } from "@/components/Fechamentos";
+import { LogoAutoClean } from "@/components/LogoAutoClean";
 import { PainelSistema } from "@/components/PainelSistema";
 import { StatusBadge } from "@/components/StatusBadge";
 import { dataLocalIso } from "@/lib/fechamento";
@@ -149,6 +150,12 @@ afterEach(() => {
 });
 
 describe("interface operacional", () => {
+  it("preserva uma margem interna para a logo não ser cortada nos cantos", () => {
+    render(<LogoAutoClean className="rounded-xl" />);
+    const logo = screen.getByAltText("Lava Rápido Auto Clean");
+    expect(logo.parentElement).toHaveClass("overflow-hidden", "p-[6%]", "rounded-xl");
+  });
+
   it("mantém rótulos textuais para todos os status, além das cores", () => {
     const statuses = ["aguardando", "em_lavagem", "pronto_para_retirada", "entregue", "cancelado"];
     render(
@@ -463,6 +470,21 @@ describe("interface operacional", () => {
     );
   });
 
+  it("separa o movimento diário da preparação do fechamento", () => {
+    renderFechamentos("administrador");
+    const movimento = screen.getByRole("tab", { name: "Movimento do dia" });
+    const fechamento = screen.getByRole("tab", { name: "Preparar fechamento" });
+
+    expect(movimento).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByText("Como o valor foi distribuído")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Confirmar fechamento" })).not.toBeInTheDocument();
+
+    fireEvent.click(fechamento);
+    expect(fechamento).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByText("Valores disponíveis para fechamento")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Confirmar fechamento" })).toBeInTheDocument();
+  });
+
   it("bloqueia dois cliques rápidos ao registrar a entrega", async () => {
     let concluir!: (resultado: { error: null }) => void;
     mocks.rpc.mockReturnValueOnce(
@@ -486,6 +508,7 @@ describe("interface operacional", () => {
   ] as const)("restringe a correção financeira entregue para %s", (papel, podeCorrigir) => {
     renderFechamentos(papel);
     if (podeCorrigir) {
+      fireEvent.click(screen.getByRole("tab", { name: "Preparar fechamento" }));
       expect(screen.getByRole("button", { name: "Corrigir" })).toBeInTheDocument();
     } else {
       expect(screen.queryByRole("button", { name: "Corrigir" })).not.toBeInTheDocument();
@@ -498,6 +521,7 @@ describe("interface operacional", () => {
       .mockReturnValueOnce("pix")
       .mockReturnValueOnce("Ajuste financeiro de teste");
     renderFechamentos("administrador");
+    fireEvent.click(screen.getByRole("tab", { name: "Preparar fechamento" }));
     fireEvent.click(screen.getByRole("button", { name: "Corrigir" }));
 
     expect(await screen.findByRole("status")).toHaveTextContent("maior que zero");
@@ -513,6 +537,7 @@ describe("interface operacional", () => {
       },
     });
 
+    fireEvent.click(screen.getByRole("tab", { name: "Preparar fechamento" }));
     expect(screen.getByRole("button", { name: "Fechamento confirmado" })).toBeDisabled();
     expect(screen.getByRole("status")).toHaveTextContent("já confirmado");
     expect(mocks.rpc).not.toHaveBeenCalled();
@@ -526,6 +551,7 @@ describe("interface operacional", () => {
       }),
     );
     renderFechamentos("administrador");
+    fireEvent.click(screen.getByRole("tab", { name: "Preparar fechamento" }));
     const confirmar = screen.getByRole("button", { name: "Confirmar fechamento" });
     fireEvent.click(confirmar);
     fireEvent.click(confirmar);
@@ -541,6 +567,7 @@ describe("interface operacional", () => {
       ajustes: [{ id: "ajuste-teste", valor: 1 }],
     });
 
+    fireEvent.click(screen.getByRole("tab", { name: "Preparar fechamento" }));
     expect(screen.getByText("1 · R$ 1,00")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Confirmar fechamento" }));
     await waitFor(() =>
@@ -554,6 +581,7 @@ describe("interface operacional", () => {
 
   it("não cria fechamento vazio quando todos os atendimentos ficam pendentes", () => {
     renderFechamentos("administrador");
+    fireEvent.click(screen.getByRole("tab", { name: "Preparar fechamento" }));
     fireEvent.click(
       screen.getByLabelText("Deixar atendimento de Cliente de teste para outro fechamento"),
     );
