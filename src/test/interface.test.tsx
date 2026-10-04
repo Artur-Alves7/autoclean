@@ -254,6 +254,69 @@ describe("interface operacional", () => {
     expect(screen.getByText("2 cliente(s)")).toBeInTheDocument();
   });
 
+  it("adiciona outro veículo a um cliente já cadastrado", async () => {
+    const qc = new QueryClient({
+      defaultOptions: { queries: { retry: false, staleTime: Infinity } },
+    });
+    qc.setQueryData(
+      ["clientes", ""],
+      [
+        {
+          id: "cliente-existente",
+          nome_completo: "Cliente existente",
+          telefone: "85999999999",
+          observacoes: null,
+          ativo: true,
+        },
+      ],
+    );
+    qc.setQueryData(["cliente-detalhes", "cliente-existente"], {
+      veiculos: [],
+      atendimentos: [],
+    });
+    qc.setQueryData(
+      ["categorias-veiculo-ativas"],
+      [{ id: categoriaId, nome: "Categoria de teste" }],
+    );
+    render(
+      <QueryClientProvider client={qc}>
+        <ClientesVeiculos papel="lavador" />
+      </QueryClientProvider>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Cliente existente/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Adicionar veículo" }));
+    const dialogo = screen.getByRole("dialog", { name: "Adicionar veículo" });
+    fireEvent.change(within(dialogo).getByLabelText("Categoria"), {
+      target: { value: categoriaId },
+    });
+    fireEvent.change(within(dialogo).getByLabelText("Marca"), {
+      target: { value: "Fiat" },
+    });
+    fireEvent.change(within(dialogo).getByLabelText("Modelo"), {
+      target: { value: "Argo" },
+    });
+    fireEvent.change(within(dialogo).getByLabelText("Placa (opcional)"), {
+      target: { value: "abc-1d23" },
+    });
+    fireEvent.change(within(dialogo).getByLabelText("Cor (opcional)"), {
+      target: { value: "Prata" },
+    });
+    fireEvent.click(within(dialogo).getByRole("button", { name: "Adicionar veículo" }));
+
+    await waitFor(() =>
+      expect(mocks.rpc).toHaveBeenCalledWith("rpc_adicionar_veiculo_cliente", {
+        p_cliente_id: "cliente-existente",
+        p_categoria_veiculo_id: categoriaId,
+        p_marca: "Fiat",
+        p_modelo: "Argo",
+        p_placa: "ABC-1D23",
+        p_cor: "Prata",
+      }),
+    );
+    expect(mocks.rpc.mock.calls[0]![1]).not.toHaveProperty("placa_normalizada");
+  });
+
   it("preserva cadastro, participantes e preço pendente no payload", async () => {
     renderFila([]);
     fireEvent.click(screen.getByRole("button", { name: "Novo atendimento" }));

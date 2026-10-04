@@ -1,12 +1,13 @@
 import { Button } from "@/components/ui/button";
 import { DialogoFormulario } from "@/components/DialogoFormulario";
-import { CarFront, Search, UsersRound } from "lucide-react";
+import { CarFront, Plus, Search, UsersRound } from "lucide-react";
 import { StatusBadge } from "@/components/StatusBadge";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
 import type { Papel } from "@/lib/acesso";
 import { db, formatarDataHora, mensagemErro } from "@/lib/supabase-db";
+import { montarPayloadNovoVeiculo } from "@/lib/veiculo";
 
 type Cliente = {
   id: string;
@@ -31,6 +32,14 @@ type EdicaoCadastro =
   | { tipo: "cliente"; id: string; nome: string; telefone: string }
   | { tipo: "veiculo"; id: string; marca: string; modelo: string; placa: string; cor: string };
 
+const veiculoVazio = {
+  categoria_veiculo_id: "",
+  marca: "",
+  modelo: "",
+  placa: "",
+  cor: "",
+};
+
 export function ClientesVeiculos({ papel }: { papel: Papel }) {
   const qc = useQueryClient();
   const [busca, setBusca] = useState("");
@@ -38,6 +47,8 @@ export function ClientesVeiculos({ papel }: { papel: Papel }) {
   const [mensagem, setMensagem] = useState<string | null>(null);
   const [edicao, setEdicao] = useState<EdicaoCadastro | null>(null);
   const [erroEdicao, setErroEdicao] = useState<string | null>(null);
+  const [novoVeiculo, setNovoVeiculo] = useState<typeof veiculoVazio | null>(null);
+  const [erroNovoVeiculo, setErroNovoVeiculo] = useState<string | null>(null);
 
   const clientes = useQuery({
     queryKey: ["clientes", busca],
@@ -102,6 +113,52 @@ export function ClientesVeiculos({ papel }: { papel: Papel }) {
         atendimentos: atendimentos.data ?? [],
       };
     },
+  });
+
+  const categorias = useQuery({
+    queryKey: ["categorias-veiculo-ativas"],
+    enabled: !!novoVeiculo,
+    queryFn: async () => {
+      const { data, error } = await db()
+        .from("categorias_veiculo")
+        .select("id, nome")
+        .eq("ativo", true)
+        .order("nome");
+      if (error) throw error;
+      return (data ?? []) as { id: string; nome: string }[];
+    },
+  });
+
+  const adicionarVeiculo = useMutation({
+    mutationFn: async () => {
+      if (!selecionado || !novoVeiculo) throw new Error("Selecione um cliente.");
+      if (!novoVeiculo.categoria_veiculo_id) throw new Error("Selecione a categoria.");
+      if (!novoVeiculo.marca.trim()) throw new Error("Informe a marca.");
+      if (!novoVeiculo.modelo.trim()) throw new Error("Informe o modelo.");
+      const payload = montarPayloadNovoVeiculo(selecionado.id, {
+        ...novoVeiculo,
+        marca: novoVeiculo.marca.trim(),
+        modelo: novoVeiculo.modelo.trim(),
+        placa: novoVeiculo.placa.trim(),
+        cor: novoVeiculo.cor.trim(),
+      });
+      const { error } = await db().rpc("rpc_adicionar_veiculo_cliente", {
+        p_cliente_id: payload.cliente_id,
+        p_categoria_veiculo_id: payload.categoria_veiculo_id,
+        p_marca: payload.marca,
+        p_modelo: payload.modelo,
+        p_placa: payload.placa,
+        p_cor: payload.cor,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      setNovoVeiculo(null);
+      setErroNovoVeiculo(null);
+      setMensagem("Veículo adicionado ao cliente.");
+      qc.invalidateQueries({ queryKey: ["cliente-detalhes", selecionado?.id] });
+    },
+    onError: (erro) => setErroNovoVeiculo(mensagemErro(erro)),
   });
 
   const atualizar = useMutation({
@@ -241,10 +298,24 @@ export function ClientesVeiculos({ papel }: { papel: Papel }) {
             </div>
 
             <div>
-              <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold">
-                <CarFront className="size-4 text-primary" aria-hidden="true" />
-                Veículos
-              </h3>
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <h3 className="flex items-center gap-2 text-sm font-semibold">
+                  <CarFront className="size-4 text-primary" aria-hidden="true" />
+                  Veículos
+                </h3>
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={!selecionado.ativo}
+                  onClick={() => {
+                    setErroNovoVeiculo(null);
+                    setNovoVeiculo({ ...veiculoVazio });
+                  }}
+                >
+                  <Plus aria-hidden="true" />
+                  Adicionar veículo
+                </Button>
+              </div>
               {detalhes.error && (
                 <p role="alert" className="lc-message mb-3">
                   {mensagemErro(detalhes.error)}
@@ -468,6 +539,97 @@ export function ClientesVeiculos({ papel }: { papel: Papel }) {
             </div>
           </>
         )}
+      </DialogoFormulario>
+      <DialogoFormulario
+        aberto={!!novoVeiculo}
+        titulo="Adicionar veículo"
+        descricao={
+          selecionado
+            ? `Cadastre outro veículo para ${selecionado.nome_completo}.`
+            : "Cadastre um veículo para o cliente selecionado."
+        }
+        erro={erroNovoVeiculo || (categorias.error ? mensagemErro(categorias.error) : null)}
+        salvando={adicionarVeiculo.isPending}
+        textoConfirmar="Adicionar veículo"
+        aoFechar={() => {
+          setNovoVeiculo(null);
+          setErroNovoVeiculo(null);
+        }}
+        aoEnviar={() => {
+          setErroNovoVeiculo(null);
+          adicionarVeiculo.mutate();
+        }}
+      >
+        <label className="lc-label">
+          Categoria
+          <select
+            className="lc-field"
+            autoFocus
+            value={novoVeiculo?.categoria_veiculo_id ?? ""}
+            onChange={(evento) =>
+              setNovoVeiculo((atual) =>
+                atual ? { ...atual, categoria_veiculo_id: evento.target.value } : atual,
+              )
+            }
+          >
+            <option value="">Selecione</option>
+            {categorias.data?.map((categoria) => (
+              <option key={categoria.id} value={categoria.id}>
+                {categoria.nome}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <label className="lc-label">
+            Marca
+            <input
+              className="lc-field"
+              value={novoVeiculo?.marca ?? ""}
+              onChange={(evento) =>
+                setNovoVeiculo((atual) =>
+                  atual ? { ...atual, marca: evento.target.value } : atual,
+                )
+              }
+            />
+          </label>
+          <label className="lc-label">
+            Modelo
+            <input
+              className="lc-field"
+              value={novoVeiculo?.modelo ?? ""}
+              onChange={(evento) =>
+                setNovoVeiculo((atual) =>
+                  atual ? { ...atual, modelo: evento.target.value } : atual,
+                )
+              }
+            />
+          </label>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <label className="lc-label">
+            Placa <span className="font-normal text-muted-foreground">(opcional)</span>
+            <input
+              className="lc-field uppercase"
+              value={novoVeiculo?.placa ?? ""}
+              onChange={(evento) =>
+                setNovoVeiculo((atual) =>
+                  atual ? { ...atual, placa: evento.target.value } : atual,
+                )
+              }
+            />
+          </label>
+          <label className="lc-label">
+            Cor <span className="font-normal text-muted-foreground">(opcional)</span>
+            <input
+              className="lc-field"
+              value={novoVeiculo?.cor ?? ""}
+              onChange={(evento) =>
+                setNovoVeiculo((atual) => (atual ? { ...atual, cor: evento.target.value } : atual))
+              }
+            />
+          </label>
+        </div>
       </DialogoFormulario>
     </section>
   );
