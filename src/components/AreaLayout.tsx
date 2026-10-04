@@ -55,8 +55,8 @@ export function AreaLayout({
           </p>
         </div>
       </aside>
-      <div className="min-w-0">
-        <header className="sticky top-0 z-30 flex min-h-16 items-center justify-between gap-3 border-b bg-card/95 px-4 backdrop-blur sm:min-h-20 sm:px-7 lg:px-8 xl:px-10">
+      <div className="min-w-0 lg:grid lg:h-dvh lg:grid-rows-[auto_minmax(0,1fr)] lg:overflow-hidden">
+        <header className="sticky top-0 z-30 flex min-h-16 items-center justify-between gap-3 border-b bg-card px-4 sm:min-h-20 sm:px-7 lg:static lg:px-8 xl:px-10">
           <div className="flex min-w-0 items-center gap-3">
             <LogoAutoClean className="size-12 shrink-0 rounded-lg object-contain lg:hidden" />
             <div>
@@ -82,23 +82,25 @@ export function AreaLayout({
             </Button>
           </div>
         </header>
-        <div className="px-3 pt-3 sm:px-6 sm:pt-4 lg:hidden">
-          <details className="lc-sidebar lc-mobile-nav">
-            <summary>
-              <Menu className="size-4" aria-hidden="true" />
-              <span>Menu do sistema</span>
-              <span className="ml-auto text-xs text-sidebar-foreground/70">{secao}</span>
-            </summary>
-            {navigation}
-          </details>
+        <div className="min-w-0 lg:overflow-y-auto">
+          <div className="px-3 pt-3 sm:px-6 sm:pt-4 lg:hidden">
+            <details className="lc-sidebar lc-mobile-nav">
+              <summary>
+                <Menu className="size-4" aria-hidden="true" />
+                <span>Menu do sistema</span>
+                <span className="ml-auto text-xs text-sidebar-foreground/70">{secao}</span>
+              </summary>
+              {navigation}
+            </details>
+          </div>
+          <main
+            id="conteudo-principal"
+            tabIndex={-1}
+            className="mx-auto w-full max-w-[1600px] p-3 pb-10 sm:p-6 lg:p-8 xl:p-10"
+          >
+            {children}
+          </main>
         </div>
-        <main
-          id="conteudo-principal"
-          tabIndex={-1}
-          className="mx-auto w-full max-w-[1600px] p-3 pb-10 sm:p-6 lg:p-8 xl:p-10"
-        >
-          {children}
-        </main>
       </div>
     </div>
   );
