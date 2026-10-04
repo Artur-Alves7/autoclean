@@ -80,6 +80,12 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       { title: "LavaClean" },
       { name: "description", content: "Sistema de gestão do lava-jato LavaClean." },
+      { name: "application-name", content: "Lava Rápido Auto Clean" },
+      { name: "theme-color", content: "#071a33" },
+      { name: "mobile-web-app-capable", content: "yes" },
+      { name: "apple-mobile-web-app-capable", content: "yes" },
+      { name: "apple-mobile-web-app-status-bar-style", content: "black-translucent" },
+      { name: "apple-mobile-web-app-title", content: "Auto Clean" },
       { property: "og:title", content: "LavaClean" },
       { property: "og:description", content: "Sistema de gestão do lava-jato LavaClean." },
       { property: "og:type", content: "website" },
@@ -92,6 +98,9 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         href: appCss,
       },
       { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },
+      { rel: "icon", href: "/pwa-192x192.png", type: "image/png", sizes: "192x192" },
+      { rel: "apple-touch-icon", href: "/apple-touch-icon.png", sizes: "180x180" },
+      { rel: "manifest", href: "/manifest.webmanifest" },
     ],
   }),
   shellComponent: RootShell,
@@ -116,6 +125,11 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+
+  useEffect(() => {
+    if (!("serviceWorker" in navigator)) return;
+    navigator.serviceWorker.register("/sw.js").catch(() => undefined);
+  }, []);
 
   return (
     <QueryClientProvider client={queryClient}>
