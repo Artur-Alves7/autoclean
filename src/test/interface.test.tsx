@@ -55,7 +55,7 @@ const filaTeste = [
     id: "atendimento-teste",
     status: "pronto_para_retirada",
     chegou_em: "2026-10-02T08:30:00-03:00",
-    agendado_para: null,
+    agendado_para: null as string | null,
     valor_final: 100,
     nome_cliente_snapshot: "Cliente de teste",
     veiculo_snapshot: "Veículo de teste",
@@ -554,16 +554,49 @@ describe("interface operacional", () => {
   });
 
   it("impede correção administrativa com valor final zero", async () => {
-    vi.spyOn(window, "prompt")
-      .mockReturnValueOnce("0")
-      .mockReturnValueOnce("pix")
-      .mockReturnValueOnce("Ajuste financeiro de teste");
+    renderFechamentos("administrador");
+    fireEvent.click(screen.getByRole("tab", { name: "Preparar fechamento" }));
+    fireEvent.click(screen.getByRole("button", { name: "Corrigir" }));
+    const dialogo = screen.getByRole("dialog", { name: "Corrigir atendimento entregue" });
+    fireEvent.change(within(dialogo).getByLabelText("Novo valor final (R$)"), {
+      target: { value: "0" },
+    });
+    fireEvent.change(within(dialogo).getByLabelText("Motivo da correção"), {
+      target: { value: "Ajuste financeiro de teste" },
+    });
+    fireEvent.click(within(dialogo).getByRole("button", { name: "Registrar correção" }));
+
+    expect(await within(dialogo).findByRole("alert")).toHaveTextContent("maior que zero");
+    expect(mocks.rpc).not.toHaveBeenCalled();
+  });
+
+  it("corrige atendimento em um diálogo visual com campos rotulados", async () => {
     renderFechamentos("administrador");
     fireEvent.click(screen.getByRole("tab", { name: "Preparar fechamento" }));
     fireEvent.click(screen.getByRole("button", { name: "Corrigir" }));
 
-    expect(await screen.findByRole("status")).toHaveTextContent("maior que zero");
-    expect(mocks.rpc).not.toHaveBeenCalled();
+    const dialogo = screen.getByRole("dialog", { name: "Corrigir atendimento entregue" });
+    expect(within(dialogo).getByRole("button", { name: "Cancelar" })).toBeInTheDocument();
+    fireEvent.change(within(dialogo).getByLabelText("Novo valor final (R$)"), {
+      target: { value: "105,50" },
+    });
+    fireEvent.change(within(dialogo).getByLabelText("Forma de pagamento"), {
+      target: { value: "dinheiro" },
+    });
+    fireEvent.change(within(dialogo).getByLabelText("Motivo da correção"), {
+      target: { value: "Valor corrigido após conferência" },
+    });
+    fireEvent.click(within(dialogo).getByRole("button", { name: "Registrar correção" }));
+
+    await waitFor(() =>
+      expect(mocks.rpc).toHaveBeenCalledWith("rpc_corrigir_atendimento_entregue", {
+        p_atendimento_id: "atendimento-entregue-teste",
+        p_valor_final: 105.5,
+        p_pagamentos: [{ forma_pagamento: "dinheiro", valor_centavos: 10550 }],
+        p_motivo: "Valor corrigido após conferência",
+      }),
+    );
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
   });
 
   it("não tenta fechar novamente uma data já confirmada", () => {

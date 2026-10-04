@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+import { DialogoFormulario } from "@/components/DialogoFormulario";
 import {
   Building2,
   CalendarDays,
@@ -46,6 +47,15 @@ type Repasse = {
   fechamentos_diarios: { data_operacao: string; status: string } | null;
 };
 
+type FormaPagamento = "dinheiro" | "pix" | "debito" | "credito" | "outro";
+
+type CorrecaoAtendimento = {
+  item: AtendimentoFechamento;
+  valor: string;
+  forma: FormaPagamento;
+  motivo: string;
+};
+
 export function Fechamentos({ perfilId, papel }: { perfilId: string; papel: Papel }) {
   const qc = useQueryClient();
   const hoje = dataLocalIso();
@@ -53,6 +63,8 @@ export function Fechamentos({ perfilId, papel }: { perfilId: string; papel: Pape
   const [visao, setVisao] = useState<"movimento" | "fechamento">("movimento");
   const [pendentes, setPendentes] = useState<string[]>([]);
   const [mensagem, setMensagem] = useState<string | null>(null);
+  const [correcao, setCorrecao] = useState<CorrecaoAtendimento | null>(null);
+  const [erroCorrecao, setErroCorrecao] = useState<string | null>(null);
   const fechandoRef = useRef(false);
   const intervalo = intervaloDataLocal(data);
 
@@ -195,35 +207,26 @@ export function Fechamentos({ perfilId, papel }: { perfilId: string; papel: Pape
     });
   };
   const corrigir = useMutation({
-    mutationFn: async (item: AtendimentoFechamento) => {
-      const valorTexto = window.prompt(
-        "Novo valor final (R$)",
-        String(item.valor_final).replace(".", ","),
-      );
-      if (valorTexto === null) return;
-      const forma = window
-        .prompt("Forma de pagamento: dinheiro, pix, debito, credito ou outro", "pix")
-        ?.toLowerCase();
-      if (!forma || !["dinheiro", "pix", "debito", "credito", "outro"].includes(forma))
-        throw new Error("Forma de pagamento inválida.");
-      const motivo = window.prompt("Motivo da correção (obrigatório)");
-      if (!motivo || motivo.trim().length < 5) throw new Error("Informe o motivo da correção.");
-      const centavos = reaisParaCentavos(valorTexto);
+    mutationFn: async (entrada: CorrecaoAtendimento) => {
+      if (entrada.motivo.trim().length < 5) throw new Error("Informe o motivo da correção.");
+      const centavos = reaisParaCentavos(entrada.valor);
       if (centavos <= 0) throw new Error("Informe um valor final maior que zero.");
       const { error } = await db().rpc("rpc_corrigir_atendimento_entregue", {
-        p_atendimento_id: item.id,
+        p_atendimento_id: entrada.item.id,
         p_valor_final: centavos / 100,
-        p_pagamentos: [{ forma_pagamento: forma, valor_centavos: centavos }],
-        p_motivo: motivo.trim(),
+        p_pagamentos: [{ forma_pagamento: entrada.forma, valor_centavos: centavos }],
+        p_motivo: entrada.motivo.trim(),
       });
       if (error) throw error;
     },
     onSuccess: () => {
+      setCorrecao(null);
+      setErroCorrecao(null);
       setMensagem("Correção registrada no histórico.");
       qc.invalidateQueries({ queryKey: ["atendimentos-fechamento"] });
       qc.invalidateQueries({ queryKey: ["ajustes-repasse-pendentes"] });
     },
-    onError: (erro) => setMensagem(mensagemErro(erro)),
+    onError: (erro) => setErroCorrecao(mensagemErro(erro)),
   });
   const selecionarData = (novaData: string) => {
     setData(novaData || hoje);
@@ -665,7 +668,15 @@ export function Fechamentos({ perfilId, papel }: { perfilId: string; papel: Pape
                         type="button"
                         className="ml-auto self-start"
                         disabled={corrigir.isPending}
-                        onClick={() => corrigir.mutate(item)}
+                        onClick={() => {
+                          setErroCorrecao(null);
+                          setCorrecao({
+                            item,
+                            valor: String(item.valor_final).replace(".", ","),
+                            forma: "pix",
+                            motivo: "",
+                          });
+                        }}
                       >
                         Corrigir
                       </Button>
@@ -713,6 +724,67 @@ export function Fechamentos({ perfilId, papel }: { perfilId: string; papel: Pape
           {mensagem}
         </p>
       )}
+      <DialogoFormulario
+        aberto={!!correcao}
+        titulo="Corrigir atendimento entregue"
+        descricao={
+          correcao
+            ? `${correcao.item.nome_cliente_snapshot} · ${correcao.item.veiculo_snapshot}`
+            : "Revise os dados financeiros do atendimento."
+        }
+        erro={erroCorrecao}
+        salvando={corrigir.isPending}
+        textoConfirmar="Registrar correção"
+        aoFechar={() => {
+          setCorrecao(null);
+          setErroCorrecao(null);
+        }}
+        aoEnviar={() => {
+          if (correcao) corrigir.mutate(correcao);
+        }}
+      >
+        <label className="lc-label">
+          Novo valor final (R$)
+          <input
+            className="lc-field"
+            inputMode="decimal"
+            autoFocus
+            value={correcao?.valor ?? ""}
+            onChange={(evento) =>
+              setCorrecao((atual) => (atual ? { ...atual, valor: evento.target.value } : atual))
+            }
+          />
+        </label>
+        <label className="lc-label">
+          Forma de pagamento
+          <select
+            className="lc-field"
+            value={correcao?.forma ?? "pix"}
+            onChange={(evento) =>
+              setCorrecao((atual) =>
+                atual ? { ...atual, forma: evento.target.value as FormaPagamento } : atual,
+              )
+            }
+          >
+            <option value="pix">PIX</option>
+            <option value="dinheiro">Dinheiro</option>
+            <option value="debito">Cartão de débito</option>
+            <option value="credito">Cartão de crédito</option>
+            <option value="outro">Outro</option>
+          </select>
+        </label>
+        <label className="lc-label">
+          Motivo da correção
+          <textarea
+            className="lc-field min-h-24 resize-y"
+            placeholder="Explique por que o valor foi alterado"
+            value={correcao?.motivo ?? ""}
+            onChange={(evento) =>
+              setCorrecao((atual) => (atual ? { ...atual, motivo: evento.target.value } : atual))
+            }
+          />
+        </label>
+      </DialogoFormulario>
     </section>
   );
 }

@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+import { DialogoFormulario } from "@/components/DialogoFormulario";
 import { CarFront, Droplets, Plus } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
@@ -7,12 +8,17 @@ import { db, formatarDinheiro, mensagemErro } from "@/lib/supabase-db";
 
 type Categoria = { id: string; nome: string; valor_empresa: number; ativo: boolean };
 type Servico = { id: string; nome: string; descricao: string | null; ativo: boolean };
+type EdicaoConfiguracao =
+  | { tipo: "categoria"; id: string; nome: string; valorEmpresa: string }
+  | { tipo: "servico"; id: string; nome: string; descricao: string };
 
 export function Configuracoes() {
   const qc = useQueryClient();
   const [categoria, setCategoria] = useState({ nome: "", valor_empresa: "" });
   const [servico, setServico] = useState({ nome: "", descricao: "" });
   const [erro, setErro] = useState<string | null>(null);
+  const [edicao, setEdicao] = useState<EdicaoConfiguracao | null>(null);
+  const [erroEdicao, setErroEdicao] = useState<string | null>(null);
   const dados = useQuery({
     queryKey: ["configuracoes"],
     queryFn: async () => {
@@ -32,9 +38,15 @@ export function Configuracoes() {
     },
     onSuccess: () => {
       setErro(null);
+      setErroEdicao(null);
+      setEdicao(null);
       qc.invalidateQueries({ queryKey: ["configuracoes"] });
     },
-    onError: (e) => setErro(mensagemErro(e)),
+    onError: (e) => {
+      const mensagem = mensagemErro(e);
+      setErro(mensagem);
+      setErroEdicao(mensagem);
+    },
   });
 
   function criarCategoria(evento: FormEvent) {
@@ -136,22 +148,13 @@ export function Configuracoes() {
                     size="sm"
                     disabled={salvar.isPending}
                     onClick={() => {
-                      const nome = window.prompt("Nome da categoria", item.nome);
-                      if (nome === null) return;
-                      const valorTexto = window.prompt(
-                        "Parte da empresa (R$)",
-                        String(item.valor_empresa).replace(".", ","),
-                      );
-                      if (valorTexto === null) return;
-                      const valor = Number(valorTexto.replace(",", "."));
-                      if (!nome.trim() || !Number.isFinite(valor) || valor < 0)
-                        return setErro("Dados da categoria inválidos.");
-                      salvar.mutate(() =>
-                        db()
-                          .from("categorias_veiculo")
-                          .update({ nome: nome.trim(), valor_empresa: valor })
-                          .eq("id", item.id),
-                      );
+                      setErroEdicao(null);
+                      setEdicao({
+                        tipo: "categoria",
+                        id: item.id,
+                        nome: item.nome,
+                        valorEmpresa: String(item.valor_empresa).replace(".", ","),
+                      });
                     }}
                   >
                     Editar
@@ -229,17 +232,13 @@ export function Configuracoes() {
                     size="sm"
                     disabled={salvar.isPending}
                     onClick={() => {
-                      const nome = window.prompt("Nome do serviço", item.nome);
-                      if (nome === null) return;
-                      const descricao = window.prompt("Descrição opcional", item.descricao ?? "");
-                      if (descricao === null) return;
-                      if (!nome.trim()) return setErro("Informe o nome do serviço.");
-                      salvar.mutate(() =>
-                        db()
-                          .from("servicos_lavagem")
-                          .update({ nome: nome.trim(), descricao: descricao.trim() || null })
-                          .eq("id", item.id),
-                      );
+                      setErroEdicao(null);
+                      setEdicao({
+                        tipo: "servico",
+                        id: item.id,
+                        nome: item.nome,
+                        descricao: item.descricao ?? "",
+                      });
                     }}
                   >
                     Editar
@@ -269,6 +268,85 @@ export function Configuracoes() {
           )}
         </div>
       </div>
+      <DialogoFormulario
+        aberto={!!edicao}
+        titulo={edicao?.tipo === "categoria" ? "Editar categoria" : "Editar serviço"}
+        descricao={
+          edicao?.tipo === "categoria"
+            ? "Atualize o nome e a parte da empresa para os próximos atendimentos."
+            : "Atualize as informações exibidas na seleção de serviços."
+        }
+        erro={erroEdicao}
+        salvando={salvar.isPending}
+        aoFechar={() => {
+          setEdicao(null);
+          setErroEdicao(null);
+        }}
+        aoEnviar={() => {
+          if (!edicao) return;
+          setErroEdicao(null);
+          if (edicao.tipo === "categoria") {
+            const valor = Number(edicao.valorEmpresa.replace(",", "."));
+            if (!edicao.nome.trim() || !Number.isFinite(valor) || valor < 0) {
+              setErroEdicao("Informe um nome e um valor válido para a categoria.");
+              return;
+            }
+            salvar.mutate(() =>
+              db()
+                .from("categorias_veiculo")
+                .update({ nome: edicao.nome.trim(), valor_empresa: valor })
+                .eq("id", edicao.id),
+            );
+            return;
+          }
+          if (!edicao.nome.trim()) {
+            setErroEdicao("Informe o nome do serviço.");
+            return;
+          }
+          salvar.mutate(() =>
+            db()
+              .from("servicos_lavagem")
+              .update({
+                nome: edicao.nome.trim(),
+                descricao: edicao.descricao.trim() || null,
+              })
+              .eq("id", edicao.id),
+          );
+        }}
+      >
+        <label className="lc-label">
+          {edicao?.tipo === "categoria" ? "Nome da categoria" : "Nome do serviço"}
+          <input
+            className="lc-field"
+            autoFocus
+            value={edicao?.nome ?? ""}
+            onChange={(evento) =>
+              setEdicao((atual) => (atual ? { ...atual, nome: evento.target.value } : atual))
+            }
+          />
+        </label>
+        {edicao?.tipo === "categoria" && (
+          <label className="lc-label">
+            Parte da empresa (R$)
+            <input
+              className="lc-field"
+              inputMode="decimal"
+              value={edicao.valorEmpresa}
+              onChange={(evento) => setEdicao({ ...edicao, valorEmpresa: evento.target.value })}
+            />
+          </label>
+        )}
+        {edicao?.tipo === "servico" && (
+          <label className="lc-label">
+            Descrição <span className="font-normal text-muted-foreground">(opcional)</span>
+            <textarea
+              className="lc-field min-h-24 resize-y"
+              value={edicao.descricao}
+              onChange={(evento) => setEdicao({ ...edicao, descricao: evento.target.value })}
+            />
+          </label>
+        )}
+      </DialogoFormulario>
     </section>
   );
 }

@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+import { DialogoFormulario } from "@/components/DialogoFormulario";
 import { CarFront, Search, UsersRound } from "lucide-react";
 import { StatusBadge } from "@/components/StatusBadge";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -26,11 +27,17 @@ type Veiculo = {
   categorias_veiculo: { nome: string } | null;
 };
 
+type EdicaoCadastro =
+  | { tipo: "cliente"; id: string; nome: string; telefone: string }
+  | { tipo: "veiculo"; id: string; marca: string; modelo: string; placa: string; cor: string };
+
 export function ClientesVeiculos({ papel }: { papel: Papel }) {
   const qc = useQueryClient();
   const [busca, setBusca] = useState("");
   const [selecionado, setSelecionado] = useState<Cliente | null>(null);
   const [mensagem, setMensagem] = useState<string | null>(null);
+  const [edicao, setEdicao] = useState<EdicaoCadastro | null>(null);
+  const [erroEdicao, setErroEdicao] = useState<string | null>(null);
 
   const clientes = useQuery({
     queryKey: ["clientes", busca],
@@ -109,12 +116,21 @@ export function ClientesVeiculos({ papel }: { papel: Papel }) {
         .eq("id", entrada.id);
       if (error) throw error;
     },
-    onSuccess: () => {
+    onSuccess: (_, entrada) => {
+      if (entrada.tabela === "clientes" && selecionado?.id === entrada.id) {
+        setSelecionado((atual) => (atual ? { ...atual, ...entrada.valores } : atual));
+      }
+      setEdicao(null);
+      setErroEdicao(null);
       setMensagem("Alteração salva.");
       qc.invalidateQueries({ queryKey: ["clientes"] });
       qc.invalidateQueries({ queryKey: ["cliente-detalhes"] });
     },
-    onError: (erro) => setMensagem(mensagemErro(erro)),
+    onError: (erro) => {
+      const texto = mensagemErro(erro);
+      setMensagem(texto);
+      setErroEdicao(texto);
+    },
   });
 
   return (
@@ -195,19 +211,12 @@ export function ClientesVeiculos({ papel }: { papel: Papel }) {
                     type="button"
                     className="rounded-md border px-3 py-1.5 text-sm"
                     onClick={() => {
-                      const nome = window.prompt("Nome completo", selecionado.nome_completo);
-                      if (nome === null) return;
-                      const telefone = window.prompt("Telefone", selecionado.telefone);
-                      if (telefone === null) return;
-                      atualizar.mutate({
-                        tabela: "clientes",
+                      setErroEdicao(null);
+                      setEdicao({
+                        tipo: "cliente",
                         id: selecionado.id,
-                        valores: { nome_completo: nome.trim(), telefone: telefone.trim() },
-                      });
-                      setSelecionado({
-                        ...selecionado,
-                        nome_completo: nome.trim(),
-                        telefone: telefone.trim(),
+                        nome: selecionado.nome_completo,
+                        telefone: selecionado.telefone,
                       });
                     }}
                   >
@@ -267,23 +276,14 @@ export function ClientesVeiculos({ papel }: { papel: Papel }) {
                             type="button"
                             className="text-primary"
                             onClick={() => {
-                              const marca = window.prompt("Marca", veiculo.marca);
-                              if (marca === null) return;
-                              const modelo = window.prompt("Modelo", veiculo.modelo);
-                              if (modelo === null) return;
-                              const placa = window.prompt("Placa opcional", veiculo.placa ?? "");
-                              if (placa === null) return;
-                              const cor = window.prompt("Cor opcional", veiculo.cor ?? "");
-                              if (cor === null) return;
-                              atualizar.mutate({
-                                tabela: "veiculos",
+                              setErroEdicao(null);
+                              setEdicao({
+                                tipo: "veiculo",
                                 id: veiculo.id,
-                                valores: {
-                                  marca: marca.trim(),
-                                  modelo: modelo.trim(),
-                                  placa: placa.trim() || null,
-                                  cor: cor.trim() || null,
-                                },
+                                marca: veiculo.marca,
+                                modelo: veiculo.modelo,
+                                placa: veiculo.placa ?? "",
+                                cor: veiculo.cor ?? "",
                               });
                             }}
                           >
@@ -357,6 +357,118 @@ export function ClientesVeiculos({ papel }: { papel: Papel }) {
           {mensagem}
         </p>
       )}
+      <DialogoFormulario
+        aberto={!!edicao}
+        titulo={edicao?.tipo === "veiculo" ? "Editar veículo" : "Editar cliente"}
+        descricao={
+          edicao?.tipo === "veiculo"
+            ? "Atualize os dados usados nos próximos atendimentos."
+            : "Mantenha os dados de contato do cliente atualizados."
+        }
+        erro={erroEdicao}
+        salvando={atualizar.isPending}
+        aoFechar={() => {
+          setEdicao(null);
+          setErroEdicao(null);
+        }}
+        aoEnviar={() => {
+          if (!edicao) return;
+          setErroEdicao(null);
+          if (edicao.tipo === "cliente") {
+            if (!edicao.nome.trim() || !edicao.telefone.trim()) {
+              setErroEdicao("Informe o nome e o telefone do cliente.");
+              return;
+            }
+            atualizar.mutate({
+              tabela: "clientes",
+              id: edicao.id,
+              valores: {
+                nome_completo: edicao.nome.trim(),
+                telefone: edicao.telefone.trim(),
+              },
+            });
+            return;
+          }
+          if (!edicao.marca.trim() || !edicao.modelo.trim()) {
+            setErroEdicao("Informe a marca e o modelo do veículo.");
+            return;
+          }
+          atualizar.mutate({
+            tabela: "veiculos",
+            id: edicao.id,
+            valores: {
+              marca: edicao.marca.trim(),
+              modelo: edicao.modelo.trim(),
+              placa: edicao.placa.trim() || null,
+              cor: edicao.cor.trim() || null,
+            },
+          });
+        }}
+      >
+        {edicao?.tipo === "cliente" && (
+          <>
+            <label className="lc-label">
+              Nome completo
+              <input
+                className="lc-field"
+                autoFocus
+                value={edicao.nome}
+                onChange={(evento) => setEdicao({ ...edicao, nome: evento.target.value })}
+              />
+            </label>
+            <label className="lc-label">
+              Telefone
+              <input
+                className="lc-field"
+                inputMode="tel"
+                value={edicao.telefone}
+                onChange={(evento) => setEdicao({ ...edicao, telefone: evento.target.value })}
+              />
+            </label>
+          </>
+        )}
+        {edicao?.tipo === "veiculo" && (
+          <>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className="lc-label">
+                Marca
+                <input
+                  className="lc-field"
+                  autoFocus
+                  value={edicao.marca}
+                  onChange={(evento) => setEdicao({ ...edicao, marca: evento.target.value })}
+                />
+              </label>
+              <label className="lc-label">
+                Modelo
+                <input
+                  className="lc-field"
+                  value={edicao.modelo}
+                  onChange={(evento) => setEdicao({ ...edicao, modelo: evento.target.value })}
+                />
+              </label>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className="lc-label">
+                Placa <span className="font-normal text-muted-foreground">(opcional)</span>
+                <input
+                  className="lc-field uppercase"
+                  value={edicao.placa}
+                  onChange={(evento) => setEdicao({ ...edicao, placa: evento.target.value })}
+                />
+              </label>
+              <label className="lc-label">
+                Cor <span className="font-normal text-muted-foreground">(opcional)</span>
+                <input
+                  className="lc-field"
+                  value={edicao.cor}
+                  onChange={(evento) => setEdicao({ ...edicao, cor: evento.target.value })}
+                />
+              </label>
+            </div>
+          </>
+        )}
+      </DialogoFormulario>
     </section>
   );
 }
