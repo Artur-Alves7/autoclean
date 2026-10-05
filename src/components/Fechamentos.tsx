@@ -1,6 +1,5 @@
 import { Button } from "@/components/ui/button";
 import { DialogoFormulario } from "@/components/DialogoFormulario";
-import { DialogoRelatorio } from "@/components/DialogoRelatorio";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import {
   Building2,
@@ -29,14 +28,8 @@ import {
   deslocarDataLocal,
   intervaloDataLocal,
 } from "@/lib/fechamento";
-import { dividirRepasseCentavos, reaisParaCentavos } from "@/lib/regras";
-import {
-  baixarCsv,
-  dataDentroDoRelatorio,
-  intervaloRelatorio,
-  sufixoRelatorio,
-  type FiltroRelatorio,
-} from "@/lib/relatorios";
+import { reaisParaCentavos } from "@/lib/regras";
+import { baixarCsv } from "@/lib/relatorios";
 import { db, formatarDinheiro, formatarDataHora, mensagemErro } from "@/lib/supabase-db";
 
 type AtendimentoFechamento = {
@@ -88,17 +81,29 @@ type CorrecaoAtendimento = {
   motivo: string;
 };
 
-export function Fechamentos({ perfilId, papel }: { perfilId: string; papel: Papel }) {
+export function Fechamentos({
+  perfilId,
+  papel,
+  dataInicial,
+  onRegistrarAtendimentoRetroativo,
+}: {
+  perfilId: string;
+  papel: Papel;
+  dataInicial?: string | undefined;
+  onRegistrarAtendimentoRetroativo?: (data: string) => void;
+}) {
   const qc = useQueryClient();
   const hoje = dataLocalIso();
-  const [data, setData] = useState(hoje);
+  const [data, setData] = useState(dataInicial ?? hoje);
   const [visao, setVisao] = useState<"movimento" | "fechamento">("movimento");
   const [pendentes, setPendentes] = useState<string[]>([]);
   const [mensagem, setMensagem] = useState<string | null>(null);
   const [correcao, setCorrecao] = useState<CorrecaoAtendimento | null>(null);
   const [erroCorrecao, setErroCorrecao] = useState<string | null>(null);
   const [abrirDetalhes, setAbrirDetalhes] = useState(false);
-  const [abrirRelatorio, setAbrirRelatorio] = useState(false);
+  const [reabrindo, setReabrindo] = useState(false);
+  const [motivoReabertura, setMotivoReabertura] = useState("");
+  const [erroReabertura, setErroReabertura] = useState<string | null>(null);
   const fechandoRef = useRef(false);
   const intervalo = intervaloDataLocal(data);
 
@@ -165,11 +170,9 @@ export function Fechamentos({ perfilId, papel }: { perfilId: string; papel: Pape
     queryKey: ["ajustes-repasse-pendentes", data],
     enabled: papel === "administrador" && visao === "fechamento",
     queryFn: async () => {
-      const { data: linhas, error } = await db()
-        .from("ajustes_repasse_pendentes")
-        .select("id, valor")
-        .is("processado_em", null)
-        .lte("criado_em", `${data}T23:59:59.999`);
+      const { data: linhas, error } = await db().rpc("rpc_listar_ajustes_fechamento", {
+        p_data_operacao: data,
+      });
       if (error) throw error;
       return (linhas ?? []) as { id: string; valor: number }[];
     },
@@ -298,6 +301,35 @@ export function Fechamentos({ perfilId, papel }: { perfilId: string; papel: Pape
       },
     });
   };
+  const reabrir = useMutation({
+    mutationFn: async () => {
+      if (motivoReabertura.trim().length < 5) {
+        throw new Error("Informe o motivo da reabertura com pelo menos 5 caracteres.");
+      }
+      const { data: fechamentoId, error } = await db().rpc("rpc_reabrir_fechamento_dia", {
+        p_data_operacao: data,
+        p_motivo: motivoReabertura.trim(),
+      });
+      if (error) throw error;
+      return fechamentoId as string;
+    },
+    onSuccess: (fechamentoId) => {
+      qc.setQueryData(["fechamento-diario", data], {
+        id: fechamentoId,
+        status: "rascunho",
+        confirmado_em: null,
+      });
+      setReabrindo(false);
+      setMotivoReabertura("");
+      setErroReabertura(null);
+      setAbrirDetalhes(false);
+      setMensagem("Fechamento reaberto. Inclua os lançamentos retroativos e confirme novamente.");
+      qc.invalidateQueries({ queryKey: ["historico-fechamentos"] });
+      qc.invalidateQueries({ queryKey: ["atendimentos-fechamento", data] });
+      qc.invalidateQueries({ queryKey: ["ajustes-repasse-pendentes", data] });
+    },
+    onError: (erro) => setErroReabertura(mensagemErro(erro)),
+  });
   const corrigir = useMutation({
     mutationFn: async (entrada: CorrecaoAtendimento) => {
       if (entrada.motivo.trim().length < 5) throw new Error("Informe o motivo da correção.");
@@ -331,89 +363,6 @@ export function Fechamentos({ perfilId, papel }: { perfilId: string; papel: Pape
     setVisao("fechamento");
     setAbrirDetalhes(true);
   };
-  const gerarLinhasMovimento = (itens: AtendimentoFechamento[]) =>
-    itens.flatMap((item) => {
-      const valorCentavos = reaisParaCentavos(Number(item.valor_final));
-      const empresaCentavos = reaisParaCentavos(Number(item.valor_empresa_snapshot));
-      const lavadores = [...item.lavadores].sort((a, b) => a.ordem_rateio - b.ordem_rateio);
-      const valoresLavadores = lavadores.length
-        ? dividirRepasseCentavos(valorCentavos, empresaCentavos, lavadores.length)
-        : [];
-      return [
-        [
-          formatarDataHora(item.entregue_em),
-          item.nome_cliente_snapshot,
-          item.veiculo_snapshot,
-          item.servico_snapshot,
-          "Empresa",
-          "Repasse",
-          formatarDinheiro(empresaCentavos / 100),
-        ],
-        ...lavadores.map((lavador, indice) => [
-          formatarDataHora(item.entregue_em),
-          item.nome_cliente_snapshot,
-          item.veiculo_snapshot,
-          item.servico_snapshot,
-          lavador.nome,
-          "Repasse",
-          formatarDinheiro(valoresLavadores[indice]! / 100),
-        ]),
-        ...(lavadores.length === 0 && valorCentavos > empresaCentavos
-          ? [
-              [
-                formatarDataHora(item.entregue_em),
-                item.nome_cliente_snapshot,
-                item.veiculo_snapshot,
-                item.servico_snapshot,
-                "Equipe não vinculada",
-                "Repasse pendente",
-                formatarDinheiro((valorCentavos - empresaCentavos) / 100),
-              ],
-            ]
-          : []),
-      ];
-    });
-  const baixarRelatorioMovimento = async (filtro: FiltroRelatorio) => {
-    const intervaloRelatorioSelecionado = intervaloRelatorio(filtro);
-    let consulta = db()
-      .from("vw_painel_atendimentos")
-      .select(
-        "id, entregue_em, nome_cliente_snapshot, veiculo_snapshot, servico_snapshot, valor_final, valor_empresa_snapshot, total_pago, lavadores",
-      )
-      .eq("status", "entregue");
-    if (intervaloRelatorioSelecionado) {
-      consulta = consulta
-        .gte("entregue_em", intervaloRelatorioSelecionado.inicio)
-        .lt("entregue_em", intervaloRelatorioSelecionado.fim);
-    }
-    const { data: registros, error } = await consulta.order("entregue_em");
-    if (error) throw error;
-    const itens = (registros ?? []) as unknown as AtendimentoFechamento[];
-    if (!itens.length) throw new Error("Nenhum repasse encontrado no período selecionado.");
-    baixarCsv(
-      `repasses-${sufixoRelatorio(filtro)}.csv`,
-      ["Data e hora", "Cliente", "Veículo", "Serviço", "Destinatário", "Tipo", "Valor"],
-      gerarLinhasMovimento(itens),
-    );
-  };
-  const baixarRelatorioLavador = async (filtro: FiltroRelatorio) => {
-    intervaloRelatorio(filtro);
-    const itens = (meusRepasses.data ?? []).filter((item) =>
-      dataDentroDoRelatorio(item.fechamentos_diarios?.data_operacao, filtro),
-    );
-    if (!itens.length) throw new Error("Nenhum repasse encontrado no período selecionado.");
-    baixarCsv(
-      `meus-repasses-${sufixoRelatorio(filtro)}.csv`,
-      ["Data do fechamento", "Cliente", "Veículo", "Status", "Valor"],
-      itens.map((item) => [
-        item.fechamentos_diarios?.data_operacao ?? "Sem data",
-        item.atendimentos?.nome_cliente_snapshot ?? "Atendimento",
-        item.atendimentos?.veiculo_snapshot ?? "Veículo não informado",
-        item.fechamentos_diarios?.status ?? "Sem status",
-        formatarDinheiro(item.valor),
-      ]),
-    );
-  };
   const baixarRelatorioFechamento = () => {
     baixarCsv(
       `fechamento-${data}.csv`,
@@ -440,22 +389,7 @@ export function Fechamentos({ perfilId, papel }: { perfilId: string; papel: Pape
             <h1 className="mt-2">Meus repasses</h1>
             <p>Consulte seus valores por dia e os veículos vinculados a cada repasse.</p>
           </div>
-          <Button
-            variant="outline"
-            className="w-full sm:w-auto"
-            onClick={() => setAbrirRelatorio(true)}
-          >
-            <Download aria-hidden="true" />
-            Baixar relatório
-          </Button>
         </div>
-        <DialogoRelatorio
-          aberto={abrirRelatorio}
-          dataPadrao={hoje}
-          titulo="Relatório dos meus repasses"
-          aoFechar={() => setAbrirRelatorio(false)}
-          aoGerar={baixarRelatorioLavador}
-        />
         {meusRepasses.isLoading && (
           <p role="status" className="text-sm text-muted-foreground">
             Carregando repasses...
@@ -740,22 +674,7 @@ export function Fechamentos({ perfilId, papel }: { perfilId: string; papel: Pape
                 Considera somente os serviços concluídos nesta data.
               </p>
             </div>
-            <Button
-              variant="outline"
-              className="w-full sm:w-auto"
-              onClick={() => setAbrirRelatorio(true)}
-            >
-              <Download aria-hidden="true" />
-              Baixar relatório
-            </Button>
           </div>
-          <DialogoRelatorio
-            aberto={abrirRelatorio}
-            dataPadrao={data}
-            titulo="Relatório de repasses"
-            aoFechar={() => setAbrirRelatorio(false)}
-            aoGerar={baixarRelatorioMovimento}
-          />
           <div className="grid gap-3 sm:grid-cols-3">
             <Resumo
               rotulo="Total recebido"
@@ -861,6 +780,12 @@ export function Fechamentos({ perfilId, papel }: { perfilId: string; papel: Pape
             <p role="status" className="lc-message">
               Fechamento desta data já confirmado. Novos atendimentos e ajustes serão considerados
               no próximo fechamento.
+            </p>
+          )}
+          {fechamentoDia.data?.status === "rascunho" && (
+            <p role="status" className="lc-message">
+              Este fechamento está reaberto. Registre os lançamentos que faltam e confirme-o
+              novamente.
             </p>
           )}
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -998,33 +923,60 @@ export function Fechamentos({ perfilId, papel }: { perfilId: string; papel: Pape
               </p>
             </div>
             {jaConfirmado ? (
-              <Button
-                type="button"
-                onClick={() => setAbrirDetalhes(true)}
-                className="w-full sm:w-fit"
-              >
-                <FolderOpen aria-hidden="true" />
-                Abrir fechamento
-              </Button>
+              <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setAbrirDetalhes(true)}
+                  className="w-full sm:w-fit"
+                >
+                  <FolderOpen aria-hidden="true" />
+                  Consultar fechamento
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => {
+                    setErroReabertura(null);
+                    setReabrindo(true);
+                  }}
+                  className="w-full sm:w-fit"
+                >
+                  <Wallet aria-hidden="true" />
+                  Reabrir para lançamentos
+                </Button>
+              </div>
             ) : (
-              <Button
-                disabled={
-                  fechar.isPending ||
-                  fechamentoDia.isLoading ||
-                  ajustesPendentes.isLoading ||
-                  !possuiLancamentos
-                }
-                aria-busy={fechar.isPending}
-                onClick={confirmarFechamento}
-                className="w-full sm:w-fit"
-              >
-                {fechar.isPending ? (
-                  <LoaderCircle className="animate-spin" aria-hidden="true" />
-                ) : (
-                  <CheckCheck aria-hidden="true" />
+              <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+                {data < hoje && onRegistrarAtendimentoRetroativo && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => onRegistrarAtendimentoRetroativo(data)}
+                    className="w-full sm:w-fit"
+                  >
+                    <ReceiptText aria-hidden="true" />
+                    Adicionar atendimento e pagamento
+                  </Button>
                 )}
-                {fechar.isPending ? "Confirmando..." : "Confirmar fechamento"}
-              </Button>
+                <Button
+                  disabled={
+                    fechar.isPending ||
+                    fechamentoDia.isLoading ||
+                    ajustesPendentes.isLoading ||
+                    !possuiLancamentos
+                  }
+                  aria-busy={fechar.isPending}
+                  onClick={confirmarFechamento}
+                  className="w-full sm:w-fit"
+                >
+                  {fechar.isPending ? (
+                    <LoaderCircle className="animate-spin" aria-hidden="true" />
+                  ) : (
+                    <CheckCheck aria-hidden="true" />
+                  )}
+                  {fechar.isPending ? "Confirmando..." : "Confirmar fechamento"}
+                </Button>
+              </div>
             )}
           </div>
         </>
@@ -1135,6 +1087,33 @@ export function Fechamentos({ perfilId, papel }: { perfilId: string; papel: Pape
           )}
         </DialogContent>
       </Dialog>
+      <DialogoFormulario
+        aberto={reabrindo}
+        titulo="Reabrir fechamento"
+        descricao={`Reabra o fechamento de ${new Date(`${data}T12:00:00`).toLocaleDateString("pt-BR")} para incluir pagamentos ou atendimentos esquecidos. Os lançamentos anteriores serão preservados.`}
+        erro={erroReabertura}
+        salvando={reabrir.isPending}
+        textoConfirmar="Reabrir fechamento"
+        aoFechar={() => {
+          setReabrindo(false);
+          setMotivoReabertura("");
+          setErroReabertura(null);
+        }}
+        aoEnviar={() => reabrir.mutate()}
+      >
+        <label className="lc-label">
+          Motivo da reabertura
+          <textarea
+            className="lc-field min-h-24 resize-y"
+            placeholder="Ex.: pagamento do atendimento não foi lançado no dia"
+            value={motivoReabertura}
+            onChange={(evento) => setMotivoReabertura(evento.target.value)}
+          />
+        </label>
+        <p className="text-xs text-muted-foreground">
+          Esta ação ficará registrada no histórico do fechamento.
+        </p>
+      </DialogoFormulario>
       <DialogoFormulario
         aberto={!!correcao}
         titulo="Corrigir atendimento entregue"

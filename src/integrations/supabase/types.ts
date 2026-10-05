@@ -409,6 +409,48 @@ export type Database = {
           },
         ]
       }
+      historico_fechamentos: {
+        Row: {
+          acao: string
+          alterado_em: string
+          alterado_por_perfil_id: string
+          fechamento_diario_id: string
+          id: string
+          motivo: string
+        }
+        Insert: {
+          acao: string
+          alterado_em?: string
+          alterado_por_perfil_id: string
+          fechamento_diario_id: string
+          id?: string
+          motivo: string
+        }
+        Update: {
+          acao?: string
+          alterado_em?: string
+          alterado_por_perfil_id?: string
+          fechamento_diario_id?: string
+          id?: string
+          motivo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "historico_fechamentos_alterado_por_perfil_id_fkey"
+            columns: ["alterado_por_perfil_id"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "historico_fechamentos_fechamento_diario_id_fkey"
+            columns: ["fechamento_diario_id"]
+            isOneToOne: false
+            referencedRelation: "fechamentos_diarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       historico_status: {
         Row: {
           alterado_em: string
@@ -848,6 +890,16 @@ export type Database = {
           valor_centavos: number
         }[]
       }
+      lc_avancar_atendimento_base: {
+        Args: {
+          p_atendimento_id: string
+          p_motivo?: string
+          p_novo_status: Database["public"]["Enums"]["status_atendimento"]
+          p_pagamentos?: Json
+          p_valor_final?: number
+        }
+        Returns: undefined
+      }
       lc_criar_atendimento_base: {
         Args: {
           p_cliente?: Json
@@ -897,12 +949,27 @@ export type Database = {
       rpc_avancar_atendimento: {
         Args: {
           p_atendimento_id: string
+          p_momento_operacao?: string
           p_motivo?: string
           p_novo_status: Database["public"]["Enums"]["status_atendimento"]
           p_pagamentos?: Json
           p_valor_final?: number
         }
         Returns: undefined
+      }
+      rpc_reabrir_fechamento_dia: {
+        Args: {
+          p_data_operacao: string
+          p_motivo: string
+        }
+        Returns: string
+      }
+      rpc_listar_ajustes_fechamento: {
+        Args: { p_data_operacao: string }
+        Returns: {
+          id: string
+          valor: number
+        }[]
       }
       rpc_corrigir_atendimento_entregue: {
         Args: {

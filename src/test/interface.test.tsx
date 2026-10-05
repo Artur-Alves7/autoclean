@@ -55,6 +55,9 @@ const filaTeste = [
     id: "atendimento-teste",
     status: "pronto_para_retirada",
     chegou_em: "2026-10-02T08:30:00-03:00",
+    lavagem_iniciada_em: "2026-10-02T08:45:00-03:00",
+    pronto_em: "2026-10-02T09:30:00-03:00",
+    entregue_em: null as string | null,
     agendado_para: null as string | null,
     valor_final: 100,
     cliente_id: "cliente-teste",
@@ -218,21 +221,7 @@ describe("interface operacional", () => {
     }
     expect(screen.getByLabelText("Selecionar data da operação")).not.toHaveAttribute("max");
     expect(screen.getByRole("button", { name: "Próximo dia" })).toBeEnabled();
-    expect(screen.getByRole("button", { name: "Baixar relatório" })).toBeEnabled();
-  });
-
-  it("oferece relatório por dia, período ou histórico completo", () => {
-    renderFila();
-    fireEvent.click(screen.getByRole("button", { name: "Baixar relatório" }));
-
-    expect(screen.getByRole("dialog", { name: "Relatório de atendimentos" })).toBeInTheDocument();
-    expect(screen.getByRole("radio", { name: /Um dia/ })).toBeChecked();
-    expect(screen.getByRole("radio", { name: /Período/ })).toBeInTheDocument();
-    expect(screen.getByRole("radio", { name: /Histórico completo/ })).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("radio", { name: /Período/ }));
-    expect(screen.getByLabelText("Data inicial do relatório")).toBeInTheDocument();
-    expect(screen.getByLabelText("Data final do relatório")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Baixar relatório" })).not.toBeInTheDocument();
   });
 
   it("diferencia agendamentos futuros na fila", () => {
@@ -269,6 +258,28 @@ describe("interface operacional", () => {
     expect(
       screen.getByText("Será registrado no histórico como atendimento retroativo."),
     ).toBeInTheDocument();
+  });
+
+  it("abre o cadastro já preparado para lançar um atendimento de data passada", () => {
+    const dataAnterior = deslocarDataLocal(dataLocalIso(), -3);
+    const qc = clienteDeTeste([]);
+    qc.setQueryData(["fila-atendimentos", dataAnterior], []);
+    render(
+      <QueryClientProvider client={qc}>
+        <FilaAtendimentos
+          perfilId="administrador-teste"
+          papel="administrador"
+          dataInicial={dataAnterior}
+          abrirNovoInicial
+        />
+      </QueryClientProvider>,
+    );
+
+    expect(screen.getByLabelText("Selecionar data da operação")).toHaveValue(dataAnterior);
+    expect(screen.getByLabelText("Escolher data e horário")).toBeChecked();
+    expect(screen.getByLabelText("Data e horário do atendimento")).toHaveValue(
+      `${dataAnterior}T12:00`,
+    );
   });
 
   it("carrega os clientes cadastrados em ordem alfabética sem exigir busca", async () => {
@@ -669,7 +680,26 @@ describe("interface operacional", () => {
           { forma_pagamento: "pix", valor_centavos: 6001 },
           { forma_pagamento: "dinheiro", valor_centavos: 4002 },
         ],
+        p_momento_operacao: null,
       }),
+    );
+  });
+
+  it("permite ao administrador registrar a entrega e o pagamento em data passada", async () => {
+    renderFila(filaTeste, "administrador");
+    fireEvent.click(screen.getByRole("button", { name: "Registrar entrega" }));
+    const momento = screen.getByLabelText("Data e horário desta etapa");
+    fireEvent.change(momento, { target: { value: "2026-10-02T10:00" } });
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
+
+    await waitFor(() =>
+      expect(mocks.rpc).toHaveBeenCalledWith(
+        "rpc_avancar_atendimento",
+        expect.objectContaining({
+          p_novo_status: "entregue",
+          p_momento_operacao: new Date("2026-10-02T10:00").toISOString(),
+        }),
+      ),
     );
   });
 
@@ -695,7 +725,7 @@ describe("interface operacional", () => {
 
     expect(movimento).toHaveAttribute("aria-selected", "true");
     expect(screen.getByText("Como o valor foi distribuído")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Baixar relatório" })).toBeEnabled();
+    expect(screen.queryByRole("button", { name: "Baixar relatório" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Confirmar fechamento" })).not.toBeInTheDocument();
 
     fireEvent.click(fechamento);
@@ -837,12 +867,40 @@ describe("interface operacional", () => {
 
     fireEvent.click(screen.getByRole("tab", { name: "Preparar fechamento" }));
     expect(screen.getByRole("status")).toHaveTextContent("já confirmado");
-    fireEvent.click(screen.getByRole("button", { name: "Abrir fechamento" }));
+    fireEvent.click(screen.getByRole("button", { name: "Consultar fechamento" }));
     const dialogo = screen.getByRole("dialog", { name: /Fechamento de/ });
     expect(within(dialogo).getByText("R$ 100,00")).toBeInTheDocument();
     expect(within(dialogo).getAllByText("Lavador de teste")).toHaveLength(2);
     expect(within(dialogo).getByRole("button", { name: "Baixar relatório" })).toBeEnabled();
     expect(mocks.rpc).not.toHaveBeenCalled();
+  });
+
+  it("reabre um fechamento confirmado com motivo obrigatório", async () => {
+    const hoje = dataLocalIso();
+    mocks.rpc.mockResolvedValueOnce({ data: "fechamento-teste", error: null });
+    renderFechamentos("administrador", {
+      fechamento: {
+        id: "fechamento-teste",
+        status: "confirmado",
+        confirmado_em: `${hoje}T18:00:00-03:00`,
+      },
+    });
+
+    fireEvent.click(screen.getByRole("tab", { name: "Preparar fechamento" }));
+    fireEvent.click(screen.getByRole("button", { name: "Reabrir para lançamentos" }));
+    const dialogo = screen.getByRole("dialog", { name: "Reabrir fechamento" });
+    fireEvent.change(within(dialogo).getByLabelText("Motivo da reabertura"), {
+      target: { value: "Pagamento não lançado no dia" },
+    });
+    fireEvent.click(within(dialogo).getByRole("button", { name: "Reabrir fechamento" }));
+
+    await waitFor(() =>
+      expect(mocks.rpc).toHaveBeenCalledWith("rpc_reabrir_fechamento_dia", {
+        p_data_operacao: hoje,
+        p_motivo: "Pagamento não lançado no dia",
+      }),
+    );
+    expect(await screen.findByText(/Fechamento reaberto/)).toBeInTheDocument();
   });
 
   it("bloqueia dois cliques rápidos no fechamento diário", async () => {
@@ -905,5 +963,21 @@ describe("interface operacional", () => {
       "aria-current",
       "page",
     );
+
+    fireEvent.click(within(nav).getByRole("button", { name: "Relatórios" }));
+    expect(await screen.findByRole("heading", { name: "Relatórios" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Atendimentos" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Meus repasses" })).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Escolher período" })).toHaveLength(2);
+    expect(within(nav).getByRole("button", { name: "Relatórios" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Escolher período" })[0]!);
+    expect(screen.getByRole("dialog", { name: "Relatório de atendimentos" })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: /Um dia/ })).toBeChecked();
+    expect(screen.getByRole("radio", { name: /Período/ })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: /Histórico completo/ })).toBeInTheDocument();
   });
 });

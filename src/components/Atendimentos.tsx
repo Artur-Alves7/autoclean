@@ -8,7 +8,6 @@ import {
   ChevronRight,
   Clock3,
   CreditCard,
-  Download,
   Droplets,
   LoaderCircle,
   PencilLine,
@@ -17,7 +16,6 @@ import {
   XCircle,
 } from "lucide-react";
 import { DialogoFormulario } from "@/components/DialogoFormulario";
-import { DialogoRelatorio } from "@/components/DialogoRelatorio";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -34,12 +32,6 @@ import {
 } from "@/lib/atendimento";
 import { dataLocalIso, deslocarDataLocal, intervaloDataLocal } from "@/lib/fechamento";
 import { formatarPlaca, formatarTelefone } from "@/lib/formatacao";
-import {
-  baixarCsv,
-  intervaloRelatorio,
-  sufixoRelatorio,
-  type FiltroRelatorio,
-} from "@/lib/relatorios";
 import {
   proximoStatus,
   reaisParaCentavos,
@@ -64,13 +56,6 @@ const ACAO: Partial<Record<StatusAtendimento, string>> = {
 };
 const campo = "lc-field";
 const rotulo = "lc-label";
-const NOMES_STATUS: Record<StatusAtendimento, string> = {
-  aguardando: "Aguardando",
-  em_lavagem: "Em lavagem",
-  pronto_para_retirada: "Pronto para retirada",
-  entregue: "Concluído",
-  cancelado: "Cancelado",
-};
 const NOMES_PAGAMENTO: Record<PagamentoEntrada["forma_pagamento"], string> = {
   dinheiro: "Dinheiro",
   pix: "PIX",
@@ -88,6 +73,9 @@ type ItemFila = {
   id: string;
   status: StatusAtendimento;
   chegou_em: string;
+  lavagem_iniciada_em: string | null;
+  pronto_em: string | null;
+  entregue_em: string | null;
   agendado_para: string | null;
   valor_final: number | null;
   nome_cliente_snapshot: string;
@@ -112,12 +100,23 @@ type Veiculo = {
 };
 type Opcao = { id: string; nome: string };
 
-export function FilaAtendimentos({ perfilId, papel }: { perfilId: string; papel: Papel }) {
+export function FilaAtendimentos({
+  perfilId,
+  papel,
+  dataInicial,
+  abrirNovoInicial = false,
+  onFluxoInicialConsumido,
+}: {
+  perfilId: string;
+  papel: Papel;
+  dataInicial?: string | undefined;
+  abrirNovoInicial?: boolean;
+  onFluxoInicialConsumido?: () => void;
+}) {
   const qc = useQueryClient();
   const hoje = dataLocalIso();
-  const [data, setData] = useState(hoje);
-  const [abrirForm, setAbrirForm] = useState(false);
-  const [abrirRelatorio, setAbrirRelatorio] = useState(false);
+  const [data, setData] = useState(dataInicial ?? hoje);
+  const [abrirForm, setAbrirForm] = useState(abrirNovoInicial);
   const [acao, setAcao] = useState<{
     item: ItemFila;
     tipo: "avancar" | "cancelar" | "participantes" | "editar";
@@ -129,7 +128,7 @@ export function FilaAtendimentos({ perfilId, papel }: { perfilId: string; papel:
       const { data, error } = await db()
         .from("vw_painel_atendimentos")
         .select(
-          "id, status, chegou_em, agendado_para, valor_final, nome_cliente_snapshot, veiculo_snapshot, categoria_veiculo_snapshot, servico_snapshot, cliente_id, veiculo_id, servico_id, observacoes, lavadores, pagamentos",
+          "id, status, chegou_em, lavagem_iniciada_em, pronto_em, entregue_em, agendado_para, valor_final, nome_cliente_snapshot, veiculo_snapshot, categoria_veiculo_snapshot, servico_snapshot, cliente_id, veiculo_id, servico_id, observacoes, lavadores, pagamentos",
         )
         .gte("chegou_em", intervalo.inicio)
         .lt("chegou_em", intervalo.fim)
@@ -140,58 +139,6 @@ export function FilaAtendimentos({ perfilId, papel }: { perfilId: string; papel:
   });
 
   const atualizar = () => qc.invalidateQueries({ queryKey: ["fila-atendimentos"] });
-  const baixarRelatorio = async (filtro: FiltroRelatorio) => {
-    const intervaloRelatorioSelecionado = intervaloRelatorio(filtro);
-    let consulta = db()
-      .from("vw_painel_atendimentos")
-      .select(
-        "id, status, chegou_em, agendado_para, valor_final, nome_cliente_snapshot, veiculo_snapshot, categoria_veiculo_snapshot, servico_snapshot, cliente_id, veiculo_id, servico_id, observacoes, lavadores, pagamentos",
-      );
-    if (intervaloRelatorioSelecionado) {
-      consulta = consulta
-        .gte("chegou_em", intervaloRelatorioSelecionado.inicio)
-        .lt("chegou_em", intervaloRelatorioSelecionado.fim);
-    }
-    const { data: linhas, error } = await consulta.order("chegou_em");
-    if (error) throw error;
-    const itens = (linhas ?? []) as unknown as ItemFila[];
-    if (!itens.length) throw new Error("Nenhum atendimento encontrado no período selecionado.");
-    baixarCsv(
-      `atendimentos-${sufixoRelatorio(filtro)}.csv`,
-      [
-        "Data e hora",
-        "Cliente",
-        "Veículo",
-        "Categoria",
-        "Serviço",
-        "Status",
-        "Valor final",
-        "Lavadores",
-        "Pagamentos",
-        "Observações",
-      ],
-      itens.map((item) => [
-        formatarDataHora(item.chegou_em),
-        item.nome_cliente_snapshot,
-        item.veiculo_snapshot,
-        item.categoria_veiculo_snapshot,
-        item.servico_snapshot,
-        NOMES_STATUS[item.status],
-        item.valor_final == null ? "Pendente" : formatarDinheiro(item.valor_final),
-        item.lavadores.map((lavador) => lavador.nome).join(", ") || "Não vinculados",
-        item.pagamentos.length
-          ? item.pagamentos
-              .map(
-                (pagamento) =>
-                  `${NOMES_PAGAMENTO[pagamento.forma_pagamento]}: ${formatarDinheiro(pagamento.valor)}`,
-              )
-              .join(" + ")
-          : "Pendente",
-        item.observacoes,
-      ]),
-    );
-  };
-
   return (
     <section className="lc-page">
       <div className="lc-page-heading">
@@ -201,14 +148,6 @@ export function FilaAtendimentos({ perfilId, papel }: { perfilId: string; papel:
           <p>Acompanhe todos os atendimentos do dia, da chegada à conclusão.</p>
         </div>
         <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
-          <Button
-            variant="outline"
-            className="w-full sm:w-auto"
-            onClick={() => setAbrirRelatorio(true)}
-          >
-            <Download aria-hidden="true" />
-            Baixar relatório
-          </Button>
           {!abrirForm && (
             <Button
               className="w-full sm:w-auto"
@@ -223,19 +162,14 @@ export function FilaAtendimentos({ perfilId, papel }: { perfilId: string; papel:
           )}
         </div>
       </div>
-      <DialogoRelatorio
-        aberto={abrirRelatorio}
-        dataPadrao={data}
-        titulo="Relatório de atendimentos"
-        aoFechar={() => setAbrirRelatorio(false)}
-        aoGerar={baixarRelatorio}
-      />
       {abrirForm && (
         <NovoAtendimento
           perfilId={perfilId}
+          dataInicial={dataInicial}
           onFechar={(dataDestino) => {
             setAbrirForm(false);
             if (dataDestino) setData(dataDestino);
+            onFluxoInicialConsumido?.();
           }}
         />
       )}
@@ -392,6 +326,7 @@ export function FilaAtendimentos({ perfilId, papel }: { perfilId: string; papel:
         <AcaoAtendimento
           item={acao.item}
           tipo={acao.tipo}
+          papel={papel}
           aoFechar={() => setAcao(null)}
           aoSalvar={() => {
             setAcao(null);
@@ -536,9 +471,11 @@ const veiculoSchema = z.object({
 
 function NovoAtendimento({
   perfilId,
+  dataInicial,
   onFechar,
 }: {
   perfilId: string;
+  dataInicial?: string | undefined;
   onFechar: (dataDestino?: string) => void;
 }) {
   const qc = useQueryClient();
@@ -562,8 +499,13 @@ function NovoAtendimento({
   const [valorDepois, setValorDepois] = useState(true);
   const [valor, setValor] = useState("");
   const [observacoes, setObservacoes] = useState("");
-  const [tipoHorario, setTipoHorario] = useState<"agora" | "personalizado">("agora");
-  const [dataHora, setDataHora] = useState(() => dataHoraLocalInput());
+  const atendimentoRetroativo = Boolean(dataInicial && dataInicial < dataLocalIso());
+  const [tipoHorario, setTipoHorario] = useState<"agora" | "personalizado">(
+    atendimentoRetroativo ? "personalizado" : "agora",
+  );
+  const [dataHora, setDataHora] = useState(() =>
+    atendimentoRetroativo ? `${dataInicial}T12:00` : dataHoraLocalInput(),
+  );
   const [erro, setErro] = useState<string | null>(null);
   const enviando = useRef(false);
   void perfilId;
@@ -1409,11 +1351,13 @@ function EditarAtendimento({
 function AcaoAtendimento({
   item,
   tipo,
+  papel,
   aoFechar,
   aoSalvar,
 }: {
   item: ItemFila;
   tipo: "avancar" | "cancelar" | "participantes";
+  papel: Papel;
   aoFechar: () => void;
   aoSalvar: () => void;
 }) {
@@ -1424,6 +1368,18 @@ function AcaoAtendimento({
       : null,
   );
   const destino = cancelando ? "cancelado" : proximoStatus(item.status);
+  const baseMomento =
+    destino === "em_lavagem"
+      ? item.chegou_em
+      : destino === "pronto_para_retirada"
+        ? (item.lavagem_iniciada_em ?? item.chegou_em)
+        : (item.pronto_em ?? item.lavagem_iniciada_em ?? item.chegou_em);
+  const [momentoRetroativo, setMomentoRetroativo] = useState(() => {
+    const base = new Date(baseMomento);
+    base.setMinutes(base.getMinutes() + 30);
+    return dataHoraLocalInput(base > new Date() ? new Date() : base);
+  });
+  const permiteMomentoRetroativo = papel === "administrador";
   const [motivo, setMotivo] = useState("");
   const [valor, setValor] = useState(
     item.valor_final == null ? "" : String(item.valor_final).replace(".", ","),
@@ -1482,6 +1438,9 @@ function AcaoAtendimento({
         p_motivo: motivo.trim() || null,
         p_valor_final: valorFinal,
         p_pagamentos: lista,
+        p_momento_operacao: permiteMomentoRetroativo
+          ? momentoLocalParaIso(momentoRetroativo)
+          : null,
       });
       if (error) throw error;
     },
@@ -1694,6 +1653,22 @@ function AcaoAtendimento({
               </section>
             )}
           </>
+        )}
+        {permiteMomentoRetroativo && tipo !== "participantes" && (
+          <label className={rotulo}>
+            Data e horário desta etapa
+            <input
+              aria-label="Data e horário desta etapa"
+              className={campo}
+              type="datetime-local"
+              max={dataHoraLocalInput()}
+              value={momentoRetroativo}
+              onChange={(evento) => setMomentoRetroativo(evento.target.value)}
+            />
+            <span className="mt-1 block text-xs font-normal text-muted-foreground">
+              A etapa e o pagamento serão registrados na data informada.
+            </span>
+          </label>
         )}
         {erro && (
           <p role="alert" className="lc-message">
