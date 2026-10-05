@@ -6,6 +6,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
 import type { Papel } from "@/lib/acesso";
+import { prepararBuscaCliente } from "@/lib/atendimento";
+import { formatarPlaca, formatarTelefone } from "@/lib/formatacao";
 import { db, formatarDataHora, mensagemErro } from "@/lib/supabase-db";
 import { montarPayloadNovoVeiculo } from "@/lib/veiculo";
 
@@ -53,15 +55,17 @@ export function ClientesVeiculos({ papel }: { papel: Papel }) {
   const clientes = useQuery({
     queryKey: ["clientes", busca],
     queryFn: async () => {
-      const termo = busca.trim().replace(/[%,()]/g, "");
-      const placa = termo.toUpperCase().replace(/[^A-Z0-9]/g, "");
+      const { termo, telefone, placa } = prepararBuscaCliente(busca);
+      const filtroTelefone = telefone ? `,telefone.ilike.%${telefone}%` : "";
       const consultaClientes = db()
         .from("clientes")
         .select("id, nome_completo, telefone, observacoes, ativo")
         .order("nome_completo");
       const [porCliente, porPlaca] = await Promise.all([
         termo
-          ? consultaClientes.or(`nome_completo.ilike.%${termo}%,telefone.ilike.%${termo}%`)
+          ? consultaClientes.or(
+              `nome_completo.ilike.%${termo}%,telefone.ilike.%${termo}%${filtroTelefone}`,
+            )
           : consultaClientes,
         placa.length >= 3
           ? db()
@@ -243,7 +247,9 @@ export function ClientesVeiculos({ papel }: { papel: Papel }) {
                   type="button"
                 >
                   <span className="block font-medium">{cliente.nome_completo}</span>
-                  <span className="text-sm text-muted-foreground">{cliente.telefone}</span>
+                  <span className="text-sm text-muted-foreground">
+                    {formatarTelefone(cliente.telefone)}
+                  </span>
                   {!cliente.ativo && <span className="ml-2 text-xs text-destructive">Inativo</span>}
                 </Button>
               </li>
@@ -259,7 +265,9 @@ export function ClientesVeiculos({ papel }: { papel: Papel }) {
                   <UsersRound className="size-5 text-primary" aria-hidden="true" />
                   {selecionado.nome_completo}
                 </h2>
-                <p className="text-sm text-muted-foreground">{selecionado.telefone}</p>
+                <p className="text-sm text-muted-foreground">
+                  {formatarTelefone(selecionado.telefone)}
+                </p>
               </div>
               {papel === "administrador" && (
                 <div className="flex gap-2">
@@ -273,7 +281,7 @@ export function ClientesVeiculos({ papel }: { papel: Papel }) {
                         tipo: "cliente",
                         id: selecionado.id,
                         nome: selecionado.nome_completo,
-                        telefone: selecionado.telefone,
+                        telefone: formatarTelefone(selecionado.telefone),
                       });
                     }}
                   >
@@ -333,7 +341,7 @@ export function ClientesVeiculos({ papel }: { papel: Papel }) {
                         <strong>
                           {veiculo.marca} {veiculo.modelo}
                         </strong>
-                        {veiculo.placa ? ` · ${veiculo.placa}` : " · Sem placa"}
+                        {veiculo.placa ? ` · ${formatarPlaca(veiculo.placa)}` : " · Sem placa"}
                         {veiculo.cor ? ` · ${veiculo.cor}` : ""}
                         <span className="text-muted-foreground">
                           {" "}
@@ -353,7 +361,7 @@ export function ClientesVeiculos({ papel }: { papel: Papel }) {
                                 id: veiculo.id,
                                 marca: veiculo.marca,
                                 modelo: veiculo.modelo,
-                                placa: veiculo.placa ?? "",
+                                placa: formatarPlaca(veiculo.placa ?? ""),
                                 cor: veiculo.cor ?? "",
                               });
                             }}
@@ -455,7 +463,7 @@ export function ClientesVeiculos({ papel }: { papel: Papel }) {
               id: edicao.id,
               valores: {
                 nome_completo: edicao.nome.trim(),
-                telefone: edicao.telefone.trim(),
+                telefone: formatarTelefone(edicao.telefone),
               },
             });
             return;
@@ -470,7 +478,7 @@ export function ClientesVeiculos({ papel }: { papel: Papel }) {
             valores: {
               marca: edicao.marca.trim(),
               modelo: edicao.modelo.trim(),
-              placa: edicao.placa.trim() || null,
+              placa: formatarPlaca(edicao.placa) || null,
               cor: edicao.cor.trim() || null,
             },
           });
@@ -491,9 +499,15 @@ export function ClientesVeiculos({ papel }: { papel: Papel }) {
               Telefone
               <input
                 className="lc-field"
+                type="tel"
                 inputMode="tel"
+                autoComplete="tel"
+                maxLength={15}
+                placeholder="(00) 00000-0000"
                 value={edicao.telefone}
-                onChange={(evento) => setEdicao({ ...edicao, telefone: evento.target.value })}
+                onChange={(evento) =>
+                  setEdicao({ ...edicao, telefone: formatarTelefone(evento.target.value) })
+                }
               />
             </label>
           </>
@@ -524,8 +538,12 @@ export function ClientesVeiculos({ papel }: { papel: Papel }) {
                 Placa <span className="font-normal text-muted-foreground">(opcional)</span>
                 <input
                   className="lc-field uppercase"
+                  maxLength={8}
+                  placeholder="ABC-1D23"
                   value={edicao.placa}
-                  onChange={(evento) => setEdicao({ ...edicao, placa: evento.target.value })}
+                  onChange={(evento) =>
+                    setEdicao({ ...edicao, placa: formatarPlaca(evento.target.value) })
+                  }
                 />
               </label>
               <label className="lc-label">
@@ -611,10 +629,12 @@ export function ClientesVeiculos({ papel }: { papel: Papel }) {
             Placa <span className="font-normal text-muted-foreground">(opcional)</span>
             <input
               className="lc-field uppercase"
+              maxLength={8}
+              placeholder="ABC-1D23"
               value={novoVeiculo?.placa ?? ""}
               onChange={(evento) =>
                 setNovoVeiculo((atual) =>
-                  atual ? { ...atual, placa: evento.target.value } : atual,
+                  atual ? { ...atual, placa: formatarPlaca(evento.target.value) } : atual,
                 )
               }
             />

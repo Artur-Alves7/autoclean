@@ -1,4 +1,5 @@
 import { reaisParaCentavos } from "@/lib/regras";
+import { formatarPlaca, formatarTelefone } from "@/lib/formatacao";
 
 type ClienteNovo = {
   nome_completo: string;
@@ -29,8 +30,10 @@ type EntradaNovoAtendimento = {
 
 export function prepararBuscaCliente(valor: string) {
   const termo = valor.trim().replace(/[%(),]/g, "");
+  const digitosTelefone = valor.replace(/\D/g, "").slice(0, 11);
   return {
     termo,
+    telefone: digitosTelefone ? digitosTelefone.split("").join("%") : "",
     placa: termo.replace(/[^a-zA-Z0-9]/g, "").toUpperCase(),
   };
 }
@@ -56,7 +59,7 @@ export function montarParametrosNovoAtendimento(entrada: EntradaNovoAtendimento)
     p_cliente: entrada.clienteNovo
       ? {
           nome_completo: entrada.clienteNovo.nome_completo.trim(),
-          telefone: entrada.clienteNovo.telefone.trim(),
+          telefone: formatarTelefone(entrada.clienteNovo.telefone),
         }
       : null,
     p_veiculo_id: entrada.veiculoId,
@@ -65,7 +68,7 @@ export function montarParametrosNovoAtendimento(entrada: EntradaNovoAtendimento)
           categoria_veiculo_id: entrada.veiculoNovo.categoria_veiculo_id,
           marca: entrada.veiculoNovo.marca.trim(),
           modelo: entrada.veiculoNovo.modelo.trim(),
-          placa: entrada.veiculoNovo.placa.trim().toUpperCase() || null,
+          placa: formatarPlaca(entrada.veiculoNovo.placa) || null,
           cor: entrada.veiculoNovo.cor.trim() || null,
           observacoes: entrada.veiculoNovo.observacoes.trim() || null,
         }

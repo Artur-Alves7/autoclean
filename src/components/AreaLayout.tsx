@@ -40,7 +40,7 @@ export function AreaLayout({
         <div className="mb-8 px-3">
           <LogoAutoClean className="mb-4 aspect-square w-full rounded-xl object-contain" />
           <p className="lc-brand text-white">
-            LavaClean<span className="text-[var(--brand-cyan)]">.</span>
+            Auto Clean<span className="text-[var(--brand-cyan)]">.</span>
           </p>
           <p className="mt-1 text-xs text-sidebar-foreground/70">Gestão do lava jato</p>
         </div>
@@ -60,7 +60,7 @@ export function AreaLayout({
           <div className="flex min-w-0 items-center gap-3">
             <LogoAutoClean className="size-12 shrink-0 rounded-lg object-contain lg:hidden" />
             <div>
-              <p className="lc-eyebrow hidden lg:block">LavaClean / Gestão</p>
+              <p className="lc-eyebrow hidden lg:block">Auto Clean / Gestão</p>
               <p className="text-sm font-semibold sm:text-base">{secao ?? titulo}</p>
             </div>
           </div>

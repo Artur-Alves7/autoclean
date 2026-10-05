@@ -26,7 +26,7 @@ export async function carregarAcesso(): Promise<Acesso | null> {
   if (pe) throw new Error("Não foi possível consultar seu perfil. Tente novamente.");
   if (!perfil)
     throw new AcessoNegado(
-      "Seu usuário não possui um perfil cadastrado no LavaClean. Procure o administrador.",
+      "Seu usuário não possui um perfil cadastrado no Auto Clean. Procure o administrador.",
     );
   if (!perfil.ativo) throw new AcessoNegado("Seu perfil está inativo. Procure o administrador.");
 

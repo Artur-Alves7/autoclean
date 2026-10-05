@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { AcessoNegado, carregarAcesso, destinoDoPapel } from "@/lib/acesso";
 import { origemDoRetornoAuth } from "@/lib/auth";
+import { normalizarEmail } from "@/lib/formatacao";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { ArrowRight, LoaderCircle, ShieldCheck } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
@@ -13,10 +14,13 @@ export const Route = createFileRoute("/")({
     typeof s["msg"] === "string" ? { msg: s["msg"] } : {},
   head: () => ({
     meta: [
-      { title: "Entrar — LavaClean" },
-      { name: "description", content: "Acesse o sistema LavaClean com seu e-mail e senha." },
-      { property: "og:title", content: "Entrar — LavaClean" },
-      { property: "og:description", content: "Acesse o sistema LavaClean com seu e-mail e senha." },
+      { title: "Entrar — Auto Clean" },
+      { name: "description", content: "Acesse o sistema Auto Clean com seu e-mail e senha." },
+      { property: "og:title", content: "Entrar — Auto Clean" },
+      {
+        property: "og:description",
+        content: "Acesse o sistema Auto Clean com seu e-mail e senha.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],
@@ -87,7 +91,7 @@ function Login() {
     setErro(null);
     setCarregando(true);
     const { error } = await supabase.auth.signInWithPassword({
-      email: email.trim(),
+      email: normalizarEmail(email),
       password: senha,
     });
     if (error) {
@@ -102,7 +106,7 @@ function Login() {
     <AuthLayout>
       <form onSubmit={entrar} className="space-y-6">
         <div className="mb-8">
-          <p className="lc-eyebrow">Bem-vindo ao LavaClean</p>
+          <p className="lc-eyebrow">Bem-vindo ao Auto Clean</p>
           <h1 className="mt-3 text-3xl font-bold tracking-tight">Acesse seu espaço</h1>
           <p className="mt-3 text-sm text-muted-foreground">
             Entre com seu e-mail e senha para continuar.
@@ -121,6 +125,7 @@ function Login() {
             autoComplete="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
+            onBlur={(e) => setEmail(normalizarEmail(e.target.value))}
             className="lc-field"
             disabled={carregando}
           />

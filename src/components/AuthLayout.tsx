@@ -8,7 +8,7 @@ export function AuthLayout({ children }: { children: ReactNode }) {
       <section className="lc-sidebar hidden flex-col justify-between p-10 lg:flex xl:p-16">
         <div className="flex items-center justify-between">
           <p className="lc-brand text-white">
-            LavaClean<span className="text-[var(--brand-cyan)]">.</span>
+            Auto Clean<span className="text-[var(--brand-cyan)]">.</span>
           </p>
           <span className="text-xs text-sidebar-foreground/70">Gestão do lava jato</span>
         </div>
@@ -35,7 +35,7 @@ export function AuthLayout({ children }: { children: ReactNode }) {
             <LogoAutoClean className="size-20 rounded-xl object-contain" />
             <div>
               <p className="lc-brand">
-                LavaClean<span className="text-primary">.</span>
+                Auto Clean<span className="text-primary">.</span>
               </p>
               <p className="mt-1 text-xs text-muted-foreground">Gestão do lava jato</p>
             </div>

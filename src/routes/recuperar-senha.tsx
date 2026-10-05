@@ -1,6 +1,7 @@
 import { AuthLayout } from "@/components/AuthLayout";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
+import { normalizarEmail } from "@/lib/formatacao";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ArrowLeft, LoaderCircle, MailCheck } from "lucide-react";
 import { useState, type FormEvent } from "react";
@@ -9,7 +10,7 @@ export const Route = createFileRoute("/recuperar-senha")({
   ssr: false,
   head: () => ({
     meta: [
-      { title: "Recuperar senha — LavaClean" },
+      { title: "Recuperar senha — Auto Clean" },
       { name: "description", content: "Solicite um link seguro para redefinir sua senha." },
     ],
   }),
@@ -30,7 +31,9 @@ function RecuperarSenha() {
       "/definir-senha?origem=recuperacao",
       window.location.origin,
     ).toString();
-    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo });
+    const { error } = await supabase.auth.resetPasswordForEmail(normalizarEmail(email), {
+      redirectTo,
+    });
     setCarregando(false);
     if (error) {
       setErro(
@@ -67,7 +70,7 @@ function RecuperarSenha() {
             <p className="lc-eyebrow">Recuperação de acesso</p>
             <h1 className="mt-3 text-3xl font-bold tracking-tight">Esqueceu sua senha?</h1>
             <p className="mt-3 text-sm leading-6 text-muted-foreground">
-              Informe o e-mail usado no LavaClean. Enviaremos as instruções para você recuperar o
+              Informe o e-mail usado no Auto Clean. Enviaremos as instruções para você recuperar o
               acesso.
             </p>
           </div>
@@ -84,6 +87,7 @@ function RecuperarSenha() {
               autoComplete="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              onBlur={(e) => setEmail(normalizarEmail(e.target.value))}
               className="lc-field"
               disabled={carregando}
               autoFocus

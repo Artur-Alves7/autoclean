@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { DialogoFormulario } from "@/components/DialogoFormulario";
+import { DialogoRelatorio } from "@/components/DialogoRelatorio";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import {
   Building2,
@@ -29,7 +30,13 @@ import {
   intervaloDataLocal,
 } from "@/lib/fechamento";
 import { dividirRepasseCentavos, reaisParaCentavos } from "@/lib/regras";
-import { baixarCsv } from "@/lib/relatorios";
+import {
+  baixarCsv,
+  dataDentroDoRelatorio,
+  intervaloRelatorio,
+  sufixoRelatorio,
+  type FiltroRelatorio,
+} from "@/lib/relatorios";
 import { db, formatarDinheiro, formatarDataHora, mensagemErro } from "@/lib/supabase-db";
 
 type AtendimentoFechamento = {
@@ -84,6 +91,7 @@ export function Fechamentos({ perfilId, papel }: { perfilId: string; papel: Pape
   const [correcao, setCorrecao] = useState<CorrecaoAtendimento | null>(null);
   const [erroCorrecao, setErroCorrecao] = useState<string | null>(null);
   const [abrirDetalhes, setAbrirDetalhes] = useState(false);
+  const [abrirRelatorio, setAbrirRelatorio] = useState(false);
   const fechandoRef = useRef(false);
   const intervalo = intervaloDataLocal(data);
 
@@ -295,8 +303,8 @@ export function Fechamentos({ perfilId, papel }: { perfilId: string; papel: Pape
     setMensagem(null);
     setAbrirDetalhes(false);
   };
-  const baixarRelatorioMovimento = () => {
-    const linhas = (historicoDia.data ?? []).flatMap((item) => {
+  const gerarLinhasMovimento = (itens: AtendimentoFechamento[]) =>
+    itens.flatMap((item) => {
       const valorCentavos = reaisParaCentavos(Number(item.valor_final));
       const empresaCentavos = reaisParaCentavos(Number(item.valor_empresa_snapshot));
       const lavadores = [...item.lavadores].sort((a, b) => a.ordem_rateio - b.ordem_rateio);
@@ -337,17 +345,39 @@ export function Fechamentos({ perfilId, papel }: { perfilId: string; papel: Pape
           : []),
       ];
     });
+  const baixarRelatorioMovimento = async (filtro: FiltroRelatorio) => {
+    const intervaloRelatorioSelecionado = intervaloRelatorio(filtro);
+    let consulta = db()
+      .from("vw_painel_atendimentos")
+      .select(
+        "id, entregue_em, nome_cliente_snapshot, veiculo_snapshot, servico_snapshot, valor_final, valor_empresa_snapshot, total_pago, lavadores",
+      )
+      .eq("status", "entregue");
+    if (intervaloRelatorioSelecionado) {
+      consulta = consulta
+        .gte("entregue_em", intervaloRelatorioSelecionado.inicio)
+        .lt("entregue_em", intervaloRelatorioSelecionado.fim);
+    }
+    const { data: registros, error } = await consulta.order("entregue_em");
+    if (error) throw error;
+    const itens = (registros ?? []) as unknown as AtendimentoFechamento[];
+    if (!itens.length) throw new Error("Nenhum repasse encontrado no período selecionado.");
     baixarCsv(
-      `repasses-${data}.csv`,
+      `repasses-${sufixoRelatorio(filtro)}.csv`,
       ["Data e hora", "Cliente", "Veículo", "Serviço", "Destinatário", "Tipo", "Valor"],
-      linhas,
+      gerarLinhasMovimento(itens),
     );
   };
-  const baixarRelatorioLavador = () => {
+  const baixarRelatorioLavador = async (filtro: FiltroRelatorio) => {
+    intervaloRelatorio(filtro);
+    const itens = (meusRepasses.data ?? []).filter((item) =>
+      dataDentroDoRelatorio(item.fechamentos_diarios?.data_operacao, filtro),
+    );
+    if (!itens.length) throw new Error("Nenhum repasse encontrado no período selecionado.");
     baixarCsv(
-      `meus-repasses-${dataLocalIso()}.csv`,
+      `meus-repasses-${sufixoRelatorio(filtro)}.csv`,
       ["Data do fechamento", "Cliente", "Veículo", "Status", "Valor"],
-      (meusRepasses.data ?? []).map((item) => [
+      itens.map((item) => [
         item.fechamentos_diarios?.data_operacao ?? "Sem data",
         item.atendimentos?.nome_cliente_snapshot ?? "Atendimento",
         item.atendimentos?.veiculo_snapshot ?? "Veículo não informado",
@@ -385,13 +415,19 @@ export function Fechamentos({ perfilId, papel }: { perfilId: string; papel: Pape
           <Button
             variant="outline"
             className="w-full sm:w-auto"
-            disabled={!meusRepasses.data?.length}
-            onClick={baixarRelatorioLavador}
+            onClick={() => setAbrirRelatorio(true)}
           >
             <Download aria-hidden="true" />
             Baixar relatório
           </Button>
         </div>
+        <DialogoRelatorio
+          aberto={abrirRelatorio}
+          dataPadrao={hoje}
+          titulo="Relatório dos meus repasses"
+          aoFechar={() => setAbrirRelatorio(false)}
+          aoGerar={baixarRelatorioLavador}
+        />
         {meusRepasses.isLoading && (
           <p role="status" className="text-sm text-muted-foreground">
             Carregando repasses...
@@ -604,13 +640,19 @@ export function Fechamentos({ perfilId, papel }: { perfilId: string; papel: Pape
             <Button
               variant="outline"
               className="w-full sm:w-auto"
-              disabled={!historicoDia.data?.length}
-              onClick={baixarRelatorioMovimento}
+              onClick={() => setAbrirRelatorio(true)}
             >
               <Download aria-hidden="true" />
               Baixar relatório
             </Button>
           </div>
+          <DialogoRelatorio
+            aberto={abrirRelatorio}
+            dataPadrao={data}
+            titulo="Relatório de repasses"
+            aoFechar={() => setAbrirRelatorio(false)}
+            aoGerar={baixarRelatorioMovimento}
+          />
           <div className="grid gap-3 sm:grid-cols-3">
             <Resumo
               rotulo="Total recebido"

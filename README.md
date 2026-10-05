@@ -1,6 +1,6 @@
-# LavaClean
+# Auto Clean
 
-Sistema operacional de lava-jato integrado a Lovable, Supabase Cloud e GitHub. O front-end usa React 19 com TanStack Start/Query; autenticação, PostgreSQL, RLS, RPCs e Edge Functions ficam no Supabase.
+Sistema operacional do lava-jato Auto Clean, integrado a Lovable, Supabase Cloud e GitHub. O front-end usa React 19 com TanStack Start/Query; autenticação, PostgreSQL, RLS, RPCs e Edge Functions ficam no Supabase.
 
 ## Funcionalidades
 

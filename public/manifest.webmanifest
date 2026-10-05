@@ -1,8 +1,8 @@
 {
   "id": "/",
-  "name": "Lava Rápido Auto Clean",
+  "name": "Auto Clean",
   "short_name": "Auto Clean",
-  "description": "Sistema de gestão do Lava Rápido Auto Clean.",
+  "description": "Sistema de gestão do lava-jato Auto Clean.",
   "lang": "pt-BR",
   "start_url": "/",
   "scope": "/",

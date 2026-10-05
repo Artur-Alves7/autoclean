@@ -1,3 +1,5 @@
+import { formatarPlaca } from "@/lib/formatacao";
+
 type DadosNovoVeiculo = {
   categoria_veiculo_id: string;
   marca: string;
@@ -12,7 +14,7 @@ export function montarPayloadNovoVeiculo(clienteId: string, veiculo: DadosNovoVe
     categoria_veiculo_id: veiculo.categoria_veiculo_id,
     marca: veiculo.marca,
     modelo: veiculo.modelo,
-    placa: veiculo.placa ? veiculo.placa.toUpperCase() : null,
+    placa: veiculo.placa ? formatarPlaca(veiculo.placa) : null,
     cor: veiculo.cor || null,
   };
 }

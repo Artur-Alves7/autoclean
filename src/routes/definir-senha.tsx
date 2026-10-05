@@ -15,8 +15,8 @@ export const Route = createFileRoute("/definir-senha")({
     s["origem"] === "convite" || s["origem"] === "recuperacao" ? { origem: s["origem"] } : {},
   head: () => ({
     meta: [
-      { title: "Definir senha — LavaClean" },
-      { name: "description", content: "Defina com segurança sua senha de acesso ao LavaClean." },
+      { title: "Definir senha — Auto Clean" },
+      { name: "description", content: "Defina com segurança sua senha de acesso ao Auto Clean." },
     ],
   }),
   component: DefinirSenha,
@@ -91,7 +91,7 @@ function DefinirSenha() {
           <p className="lc-eyebrow mt-6">Senha definida</p>
           <h1 className="mt-3 text-3xl font-bold tracking-tight">Seu acesso está pronto</h1>
           <p className="mt-4 text-sm leading-6 text-muted-foreground">
-            Sua nova senha foi salva com segurança. Você já pode continuar para o LavaClean.
+            Sua nova senha foi salva com segurança. Você já pode continuar para o Auto Clean.
           </p>
           <Button type="button" size="lg" className="mt-8 w-full" onClick={() => void continuar()}>
             Continuar

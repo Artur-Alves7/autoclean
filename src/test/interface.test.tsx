@@ -165,7 +165,7 @@ afterEach(() => {
 describe("interface operacional", () => {
   it("preserva uma margem interna para a logo não ser cortada nos cantos", () => {
     render(<LogoAutoClean className="rounded-xl" />);
-    const logo = screen.getByAltText("Lava Rápido Auto Clean");
+    const logo = screen.getByAltText("Auto Clean");
     expect(logo.parentElement).toHaveClass("overflow-hidden", "p-[6%]", "rounded-xl");
   });
 
@@ -207,6 +207,20 @@ describe("interface operacional", () => {
     expect(screen.getByLabelText("Selecionar data da operação")).not.toHaveAttribute("max");
     expect(screen.getByRole("button", { name: "Próximo dia" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "Baixar relatório" })).toBeEnabled();
+  });
+
+  it("oferece relatório por dia, período ou histórico completo", () => {
+    renderFila();
+    fireEvent.click(screen.getByRole("button", { name: "Baixar relatório" }));
+
+    expect(screen.getByRole("dialog", { name: "Relatório de atendimentos" })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: /Um dia/ })).toBeChecked();
+    expect(screen.getByRole("radio", { name: /Período/ })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: /Histórico completo/ })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("radio", { name: /Período/ }));
+    expect(screen.getByLabelText("Data inicial do relatório")).toBeInTheDocument();
+    expect(screen.getByLabelText("Data final do relatório")).toBeInTheDocument();
   });
 
   it("diferencia agendamentos futuros na fila", () => {
@@ -304,6 +318,7 @@ describe("interface operacional", () => {
     fireEvent.change(within(dialogo).getByLabelText("Placa (opcional)"), {
       target: { value: "abc-1d23" },
     });
+    expect(within(dialogo).getByLabelText("Placa (opcional)")).toHaveValue("ABC-1D23");
     fireEvent.change(within(dialogo).getByLabelText("Cor (opcional)"), {
       target: { value: "Prata" },
     });
@@ -330,6 +345,7 @@ describe("interface operacional", () => {
       target: { value: "Cliente de teste" },
     });
     fireEvent.change(screen.getByLabelText("Telefone"), { target: { value: "85999999999" } });
+    expect(screen.getByLabelText("Telefone")).toHaveValue("(85) 99999-9999");
     fireEvent.change(screen.getByLabelText("Categoria"), { target: { value: categoriaId } });
     fireEvent.change(screen.getByLabelText("Marca", { exact: true }), {
       target: { value: "Marca teste" },
@@ -347,7 +363,7 @@ describe("interface operacional", () => {
       expect(mocks.rpc).toHaveBeenCalledWith(
         "rpc_criar_atendimento",
         expect.objectContaining({
-          p_cliente: { nome_completo: "Cliente de teste", telefone: "85999999999" },
+          p_cliente: { nome_completo: "Cliente de teste", telefone: "(85) 99999-9999" },
           p_lavadores: ["lavador-teste"],
           p_valor_final: null,
           p_servico_id: "servico-teste",
@@ -390,7 +406,9 @@ describe("interface operacional", () => {
     fireEvent.change(screen.getByLabelText("Buscar cliente por nome, telefone ou placa"), {
       target: { value: "Cliente existente" },
     });
-    fireEvent.click(await screen.findByRole("button", { name: /Cliente existente · 85988887777/ }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: /Cliente existente · \(85\) 98888-7777/ }),
+    );
     expect(await screen.findByLabelText(/Honda CG 160 · Sem placa/)).toBeInTheDocument();
     fireEvent.click(screen.getByLabelText(/Fiat Argo · ABC-1D23/));
     fireEvent.change(screen.getByLabelText("Serviço", { exact: true }), {
@@ -583,9 +601,7 @@ describe("interface operacional", () => {
     const dialog = screen.getByRole("dialog", { name: "Registrar entrega" });
     expect(within(dialog).getByLabelText("Forma 1")).toBeInTheDocument();
     expect(within(dialog).getByLabelText("Valor (R$)", { exact: true })).toBeInTheDocument();
-    expect(
-      within(dialog).getByAltText("QR Code PIX do Lava Rápido Auto Clean"),
-    ).toBeInTheDocument();
+    expect(within(dialog).getByAltText("QR Code PIX do Auto Clean")).toBeInTheDocument();
     await waitFor(() => expect(dialog.contains(document.activeElement)).toBe(true));
     fireEvent.keyDown(document.activeElement!, { key: "Escape" });
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());

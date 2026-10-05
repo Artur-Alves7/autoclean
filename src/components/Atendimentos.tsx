@@ -17,6 +17,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { DialogoFormulario } from "@/components/DialogoFormulario";
+import { DialogoRelatorio } from "@/components/DialogoRelatorio";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -32,7 +33,13 @@ import {
   prepararBuscaCliente,
 } from "@/lib/atendimento";
 import { dataLocalIso, deslocarDataLocal, intervaloDataLocal } from "@/lib/fechamento";
-import { baixarCsv } from "@/lib/relatorios";
+import { formatarPlaca, formatarTelefone } from "@/lib/formatacao";
+import {
+  baixarCsv,
+  intervaloRelatorio,
+  sufixoRelatorio,
+  type FiltroRelatorio,
+} from "@/lib/relatorios";
 import {
   proximoStatus,
   reaisParaCentavos,
@@ -110,6 +117,7 @@ export function FilaAtendimentos({ perfilId, papel }: { perfilId: string; papel:
   const hoje = dataLocalIso();
   const [data, setData] = useState(hoje);
   const [abrirForm, setAbrirForm] = useState(false);
+  const [abrirRelatorio, setAbrirRelatorio] = useState(false);
   const [acao, setAcao] = useState<{
     item: ItemFila;
     tipo: "avancar" | "cancelar" | "participantes" | "editar";
@@ -132,10 +140,24 @@ export function FilaAtendimentos({ perfilId, papel }: { perfilId: string; papel:
   });
 
   const atualizar = () => qc.invalidateQueries({ queryKey: ["fila-atendimentos"] });
-  const baixarRelatorio = () => {
-    const itens = fila.data ?? [];
+  const baixarRelatorio = async (filtro: FiltroRelatorio) => {
+    const intervaloRelatorioSelecionado = intervaloRelatorio(filtro);
+    let consulta = db()
+      .from("vw_painel_atendimentos")
+      .select(
+        "id, status, chegou_em, agendado_para, valor_final, nome_cliente_snapshot, veiculo_snapshot, categoria_veiculo_snapshot, servico_snapshot, cliente_id, veiculo_id, servico_id, observacoes, lavadores, pagamentos",
+      );
+    if (intervaloRelatorioSelecionado) {
+      consulta = consulta
+        .gte("chegou_em", intervaloRelatorioSelecionado.inicio)
+        .lt("chegou_em", intervaloRelatorioSelecionado.fim);
+    }
+    const { data: linhas, error } = await consulta.order("chegou_em");
+    if (error) throw error;
+    const itens = (linhas ?? []) as unknown as ItemFila[];
+    if (!itens.length) throw new Error("Nenhum atendimento encontrado no período selecionado.");
     baixarCsv(
-      `atendimentos-${data}.csv`,
+      `atendimentos-${sufixoRelatorio(filtro)}.csv`,
       [
         "Data e hora",
         "Cliente",
@@ -182,8 +204,7 @@ export function FilaAtendimentos({ perfilId, papel }: { perfilId: string; papel:
           <Button
             variant="outline"
             className="w-full sm:w-auto"
-            disabled={!fila.data?.length}
-            onClick={baixarRelatorio}
+            onClick={() => setAbrirRelatorio(true)}
           >
             <Download aria-hidden="true" />
             Baixar relatório
@@ -202,6 +223,13 @@ export function FilaAtendimentos({ perfilId, papel }: { perfilId: string; papel:
           )}
         </div>
       </div>
+      <DialogoRelatorio
+        aberto={abrirRelatorio}
+        dataPadrao={data}
+        titulo="Relatório de atendimentos"
+        aoFechar={() => setAbrirRelatorio(false)}
+        aoGerar={baixarRelatorio}
+      />
       {abrirForm && (
         <NovoAtendimento
           perfilId={perfilId}
@@ -548,13 +576,14 @@ function NovoAtendimento({
     queryKey: ["busca-clientes", buscaDeb],
     enabled: buscaDeb.length >= 2 && !cliente,
     queryFn: async () => {
-      const { termo, placa } = prepararBuscaCliente(buscaDeb);
+      const { termo, telefone, placa } = prepararBuscaCliente(buscaDeb);
+      const filtroTelefone = telefone ? `,telefone.ilike.%${telefone}%` : "";
       const [porCliente, porPlaca] = await Promise.all([
         db()
           .from("clientes")
           .select("id, nome_completo, telefone")
           .eq("ativo", true)
-          .or(`nome_completo.ilike.%${termo}%,telefone.ilike.%${termo}%`)
+          .or(`nome_completo.ilike.%${termo}%,telefone.ilike.%${termo}%${filtroTelefone}`)
           .limit(10),
         placa.length >= 3
           ? db()
@@ -753,7 +782,7 @@ function NovoAtendimento({
         {cliente ? (
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-accent p-3 text-sm">
             <span>
-              {cliente.nome_completo} · {cliente.telefone}
+              {cliente.nome_completo} · {formatarTelefone(cliente.telefone)}
             </span>
             <Button
               variant="outline"
@@ -786,8 +815,13 @@ function NovoAtendimento({
                 className={campo}
                 type="tel"
                 autoComplete="tel"
+                inputMode="tel"
+                maxLength={15}
+                placeholder="(00) 00000-0000"
                 value={dadosCliente.telefone}
-                onChange={(e) => setDadosCliente({ ...dadosCliente, telefone: e.target.value })}
+                onChange={(e) =>
+                  setDadosCliente({ ...dadosCliente, telefone: formatarTelefone(e.target.value) })
+                }
               />
             </label>
             <Button
@@ -832,7 +866,7 @@ function NovoAtendimento({
                     className="w-full p-2 text-left text-sm"
                     onClick={() => setCliente(c)}
                   >
-                    {c.nome_completo} · {c.telefone}
+                    {c.nome_completo} · {formatarTelefone(c.telefone)}
                   </Button>
                 </li>
               ))}
@@ -877,7 +911,8 @@ function NovoAtendimento({
                     onChange={() => setVeiculoId(v.id)}
                   />
                   {v.marca} {v.modelo}
-                  {v.placa ? ` · ${v.placa}` : " · Sem placa"} ({v.categorias_veiculo?.nome})
+                  {v.placa ? ` · ${formatarPlaca(v.placa)}` : " · Sem placa"} (
+                  {v.categorias_veiculo?.nome})
                 </label>
               ))}
               <Button
@@ -917,9 +952,16 @@ function NovoAtendimento({
                     <span className="ml-1 font-normal text-muted-foreground">(opcional)</span>
                   )}
                   <input
-                    className={campo}
+                    className={`${campo} ${chave === "placa" ? "uppercase" : ""}`}
+                    maxLength={chave === "placa" ? 8 : undefined}
+                    placeholder={chave === "placa" ? "ABC-1D23" : undefined}
                     value={veiculo[chave]}
-                    onChange={(e) => setVeiculo({ ...veiculo, [chave]: e.target.value })}
+                    onChange={(e) =>
+                      setVeiculo({
+                        ...veiculo,
+                        [chave]: chave === "placa" ? formatarPlaca(e.target.value) : e.target.value,
+                      })
+                    }
                   />
                 </label>
               ))}
@@ -1646,7 +1688,7 @@ function AcaoAtendimento({
                 </p>
                 <img
                   src="/pix-lava-rapido.jpeg"
-                  alt="QR Code PIX do Lava Rápido Auto Clean"
+                  alt="QR Code PIX do Auto Clean"
                   className="mx-auto mt-4 aspect-square w-full max-w-72 rounded-xl border bg-white object-contain p-2"
                 />
               </section>

@@ -7,10 +7,10 @@ export const Route = createFileRoute("/_authenticated/admin")({
   },
   head: () => ({
     meta: [
-      { title: "Área administrativa — LavaClean" },
-      { name: "description", content: "Painel inicial do administrador do LavaClean." },
-      { property: "og:title", content: "Área administrativa — LavaClean" },
-      { property: "og:description", content: "Painel inicial do administrador do LavaClean." },
+      { title: "Área administrativa — Auto Clean" },
+      { name: "description", content: "Painel inicial do administrador do Auto Clean." },
+      { property: "og:title", content: "Área administrativa — Auto Clean" },
+      { property: "og:description", content: "Painel inicial do administrador do Auto Clean." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],

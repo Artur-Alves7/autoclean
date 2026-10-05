@@ -68,7 +68,7 @@ describe("payload do novo atendimento", () => {
       p_servico_id: "servico-teste",
       p_lavadores: ["lavador-1", "lavador-2"],
       p_cliente_id: null,
-      p_cliente: { nome_completo: "Cliente de teste", telefone: "85999999999" },
+      p_cliente: { nome_completo: "Cliente de teste", telefone: "(85) 99999-9999" },
       p_veiculo_id: null,
       p_veiculo: {
         marca: "Honda",
@@ -141,6 +141,7 @@ describe("busca de cliente e veículo", () => {
   it("normaliza a placa de busca sem alterar o termo exibido", () => {
     expect(prepararBuscaCliente(" abc-1d23 ")).toEqual({
       termo: "abc-1d23",
+      telefone: "1%2%3",
       placa: "ABC1D23",
     });
   });
@@ -148,7 +149,12 @@ describe("busca de cliente e veículo", () => {
   it("remove caracteres reservados do filtro PostgREST", () => {
     expect(prepararBuscaCliente("Cliente%,(Teste)")).toEqual({
       termo: "ClienteTeste",
+      telefone: "",
       placa: "CLIENTETESTE",
     });
+  });
+
+  it("prepara busca de telefone com ou sem máscara", () => {
+    expect(prepararBuscaCliente("(85) 99999-9999").telefone).toBe("8%5%9%9%9%9%9%9%9%9%9");
   });
 });

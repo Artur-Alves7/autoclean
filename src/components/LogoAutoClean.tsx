@@ -14,7 +14,7 @@ export function LogoAutoClean({ className }: { className?: string }) {
     >
       <img
         src="/auto-clean-logo.jpeg"
-        alt="Lava Rápido Auto Clean"
+        alt="Auto Clean"
         width={1024}
         height={1024}
         className="size-full object-contain"

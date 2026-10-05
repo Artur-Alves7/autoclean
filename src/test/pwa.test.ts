@@ -9,7 +9,7 @@ describe("instalação como aplicativo", () => {
       icons: { src: string; purpose: string }[];
     };
 
-    expect(manifesto.name).toBe("Lava Rápido Auto Clean");
+    expect(manifesto.name).toBe("Auto Clean");
     expect(manifesto.short_name).toBe("Auto Clean");
     expect(manifesto.icons).toEqual(
       expect.arrayContaining([

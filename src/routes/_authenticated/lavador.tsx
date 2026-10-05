@@ -7,10 +7,10 @@ export const Route = createFileRoute("/_authenticated/lavador")({
   },
   head: () => ({
     meta: [
-      { title: "Área do lavador — LavaClean" },
-      { name: "description", content: "Painel inicial do lavador no LavaClean." },
-      { property: "og:title", content: "Área do lavador — LavaClean" },
-      { property: "og:description", content: "Painel inicial do lavador no LavaClean." },
+      { title: "Área do lavador — Auto Clean" },
+      { name: "description", content: "Painel inicial do lavador no Auto Clean." },
+      { property: "og:title", content: "Área do lavador — Auto Clean" },
+      { property: "og:description", content: "Painel inicial do lavador no Auto Clean." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],

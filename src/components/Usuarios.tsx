@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
 
 import { supabase } from "@/integrations/supabase/client";
+import { formatarTelefone, normalizarEmail } from "@/lib/formatacao";
 import { db, mensagemErro } from "@/lib/supabase-db";
 
 type Usuario = {
@@ -62,7 +63,13 @@ export function Usuarios() {
     setMensagem(null);
     setEnviando(true);
     try {
-      const { error } = await supabase.functions.invoke("convidar-usuario", { body: convite });
+      const { error } = await supabase.functions.invoke("convidar-usuario", {
+        body: {
+          ...convite,
+          email: normalizarEmail(convite.email),
+          telefone: formatarTelefone(convite.telefone),
+        },
+      });
       if (error) return setMensagem(mensagemErro(error));
       setMensagem("Convite enviado e perfil preparado para o primeiro acesso.");
       setConvite({ email: "", nome_completo: "", telefone: "", papel: "lavador" });
@@ -105,6 +112,7 @@ export function Usuarios() {
             placeholder="E-mail"
             value={convite.email}
             onChange={(e) => setConvite({ ...convite, email: e.target.value })}
+            onBlur={(e) => setConvite({ ...convite, email: normalizarEmail(e.target.value) })}
           />
         </label>
         <label className="lc-label">
@@ -122,11 +130,13 @@ export function Usuarios() {
           Telefone <span className="font-normal text-muted-foreground">(opcional)</span>
           <input
             className="lc-field"
-            placeholder="Telefone opcional"
             type="tel"
             autoComplete="tel"
+            inputMode="tel"
+            maxLength={15}
+            placeholder="(00) 00000-0000"
             value={convite.telefone}
-            onChange={(e) => setConvite({ ...convite, telefone: e.target.value })}
+            onChange={(e) => setConvite({ ...convite, telefone: formatarTelefone(e.target.value) })}
           />
         </label>
         <label className="lc-label">
