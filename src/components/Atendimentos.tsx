@@ -1406,7 +1406,7 @@ function AcaoAtendimento({
       if (cancelando && motivo.trim().length < 3)
         throw new Error("Informe o motivo do cancelamento.");
       let lista: PagamentoEntrada[] | null = null;
-      let valorFinal = item.valor_final;
+      let valorFinal: number | null = null;
       if (destino === "entregue") {
         const valorFinalCentavos = reaisParaCentavos(valor);
         valorFinal = valorFinalCentavos / 100;
