@@ -57,8 +57,20 @@ export function AreaLayout({
         <header className="sticky top-0 z-30 flex min-h-24 items-center justify-between gap-2 border-b bg-card/95 px-3 backdrop-blur-md sm:gap-3 sm:px-6 lg:static lg:min-h-20 lg:px-8 xl:px-10">
           <div className="flex min-w-0 items-center gap-3">
             <LogoAutoClean className="lc-mobile-logo object-contain lg:hidden" />
-            <div className="min-w-0">
-              <p className="lc-eyebrow hidden lg:block">Auto Clean / Gestão</p>
+            <details className="lc-header-nav group lg:hidden">
+              <summary aria-label={`Abrir menu do sistema. Seção atual: ${secao ?? titulo}`}>
+                <Menu className="size-4" aria-hidden="true" />
+                <span className="min-[360px]:hidden">Menu</span>
+                <span className="hidden min-[360px]:inline">Menu do sistema</span>
+                <ChevronDown
+                  className="size-4 transition-transform group-open:rotate-180"
+                  aria-hidden="true"
+                />
+              </summary>
+              {navigation}
+            </details>
+            <div className="hidden min-w-0 lg:block">
+              <p className="lc-eyebrow">Auto Clean / Gestão</p>
               <p className="truncate text-sm font-semibold sm:text-base">{secao ?? titulo}</p>
             </div>
           </div>
@@ -88,22 +100,6 @@ export function AreaLayout({
           </div>
         </header>
         <div className="min-w-0 lg:overflow-y-auto">
-          <div className="sticky top-24 z-20 px-3 pt-3 sm:px-6 sm:pt-4 lg:hidden">
-            <details className="lc-sidebar lc-mobile-nav group">
-              <summary>
-                <Menu className="size-4" aria-hidden="true" />
-                <span>Menu do sistema</span>
-                <span className="ml-auto max-w-28 truncate text-xs text-sidebar-foreground/70 sm:max-w-64">
-                  {secao}
-                </span>
-                <ChevronDown
-                  className="size-4 transition-transform group-open:rotate-180"
-                  aria-hidden="true"
-                />
-              </summary>
-              {navigation}
-            </details>
-          </div>
           <main
             id="conteudo-principal"
             tabIndex={-1}
