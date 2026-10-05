@@ -239,10 +239,10 @@
     object-fit: contain;
   }
   .lc-mobile-logo {
-    width: 3.25rem;
-    height: 3.25rem;
-    flex: 0 0 3.25rem;
-    border-radius: 0.75rem;
+    width: 5rem;
+    height: 5rem;
+    flex: 0 0 5rem;
+    border-radius: 1rem;
   }
   .lc-eyebrow {
     font-size: 0.6875rem;

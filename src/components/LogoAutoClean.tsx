@@ -8,7 +8,7 @@ export function LogoAutoClean({ className }: { className?: string }) {
   return (
     <span
       className={cn(
-        "inline-flex items-center justify-center overflow-hidden bg-black p-[6%]",
+        "inline-flex items-center justify-center overflow-hidden bg-black p-[3%]",
         className,
       )}
     >

@@ -54,7 +54,7 @@ export function AreaLayout({
         </div>
       </aside>
       <div className="min-w-0 lg:grid lg:h-dvh lg:grid-rows-[auto_minmax(0,1fr)] lg:overflow-hidden">
-        <header className="sticky top-0 z-30 flex min-h-16 items-center justify-between gap-2 border-b bg-card/95 px-3 backdrop-blur-md sm:min-h-20 sm:gap-3 sm:px-6 lg:static lg:px-8 xl:px-10">
+        <header className="sticky top-0 z-30 flex min-h-24 items-center justify-between gap-2 border-b bg-card/95 px-3 backdrop-blur-md sm:gap-3 sm:px-6 lg:static lg:min-h-20 lg:px-8 xl:px-10">
           <div className="flex min-w-0 items-center gap-3">
             <LogoAutoClean className="lc-mobile-logo object-contain lg:hidden" />
             <div className="min-w-0">
@@ -88,7 +88,7 @@ export function AreaLayout({
           </div>
         </header>
         <div className="min-w-0 lg:overflow-y-auto">
-          <div className="sticky top-16 z-20 px-3 pt-3 sm:top-20 sm:px-6 sm:pt-4 lg:hidden">
+          <div className="sticky top-24 z-20 px-3 pt-3 sm:px-6 sm:pt-4 lg:hidden">
             <details className="lc-sidebar lc-mobile-nav group">
               <summary>
                 <Menu className="size-4" aria-hidden="true" />
