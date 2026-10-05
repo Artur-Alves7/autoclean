@@ -43,7 +43,7 @@ export function DialogoFormulario({
         if (!novoEstado && !salvando) aoFechar();
       }}
     >
-      <DialogContent className="lc-workspace max-h-[90dvh] w-[calc(100%-2rem)] overflow-y-auto rounded-2xl border-primary/20 bg-card p-0 shadow-2xl sm:max-w-lg">
+      <DialogContent className="lc-workspace max-h-[calc(100dvh-1rem)] overflow-y-auto border-primary/20 bg-card p-0 shadow-2xl sm:max-h-[90dvh] sm:max-w-lg">
         <div className="border-b bg-muted/35 px-5 py-5 pr-12 sm:px-6">
           <div className="flex items-start gap-3">
             <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-primary text-primary-foreground shadow-sm">
@@ -62,7 +62,7 @@ export function DialogoFormulario({
               {erro}
             </p>
           )}
-          <DialogFooter className="gap-2 border-t pt-5 sm:space-x-0">
+          <DialogFooter className="gap-2 border-t pt-5 [&>button]:w-full sm:space-x-0 sm:[&>button]:w-auto">
             <Button type="button" variant="outline" disabled={salvando} onClick={aoFechar}>
               Cancelar
             </Button>

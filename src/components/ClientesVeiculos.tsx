@@ -236,7 +236,7 @@ export function ClientesVeiculos({ papel }: { papel: Papel }) {
           <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             {clientes.data?.length ?? 0} cliente(s)
           </p>
-          <ul className="max-h-[68dvh] divide-y overflow-y-auto rounded-xl border bg-card empty:hidden">
+          <ul className="max-h-96 divide-y overflow-y-auto rounded-2xl border bg-card shadow-sm empty:hidden lg:max-h-[68dvh]">
             {clientes.data?.map((cliente) => (
               <li key={cliente.id}>
                 <Button
@@ -270,7 +270,7 @@ export function ClientesVeiculos({ papel }: { papel: Papel }) {
                 </p>
               </div>
               {papel === "administrador" && (
-                <div className="flex gap-2">
+                <div className="flex w-full flex-col gap-2 min-[420px]:w-auto min-[420px]:flex-row">
                   <Button
                     variant="outline"
                     type="button"
@@ -335,7 +335,7 @@ export function ClientesVeiculos({ papel }: { papel: Papel }) {
               {detalhes.isLoading && <p className="text-sm text-muted-foreground">Carregando...</p>}
               <ul className="space-y-2">
                 {detalhes.data?.veiculos.map((veiculo) => (
-                  <li key={veiculo.id} className="rounded-md border p-3 text-sm">
+                  <li key={veiculo.id} className="rounded-xl border bg-muted/20 p-3 text-sm">
                     <div className="flex flex-wrap justify-between gap-3">
                       <span>
                         <strong>
@@ -349,7 +349,7 @@ export function ClientesVeiculos({ papel }: { papel: Papel }) {
                         </span>
                       </span>
                       {papel === "administrador" && (
-                        <span className="flex gap-2">
+                        <span className="flex w-full flex-col gap-2 min-[420px]:w-auto min-[420px]:flex-row">
                           <Button
                             variant="outline"
                             type="button"
@@ -409,7 +409,7 @@ export function ClientesVeiculos({ papel }: { papel: Papel }) {
               <h3 className="mb-2 font-medium">Histórico de atendimentos</h3>
               <ul className="space-y-2 text-sm">
                 {detalhes.data?.atendimentos.map((atendimento) => (
-                  <li key={atendimento.id} className="rounded-md bg-muted p-3">
+                  <li key={atendimento.id} className="rounded-xl border bg-muted/60 p-3">
                     {formatarDataHora(atendimento.chegou_em)} · {atendimento.veiculo_snapshot} ·{" "}
                     {atendimento.servico_snapshot}
                     <span className="ml-2 inline-block">

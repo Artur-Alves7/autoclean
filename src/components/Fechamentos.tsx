@@ -663,16 +663,6 @@ export function Fechamentos({
         </>
       ) : (
         <>
-          <div className="rounded-xl border border-primary/20 bg-accent p-4 text-sm">
-            <p className="flex items-center gap-2 font-semibold text-primary">
-              <CircleAlert className="size-4" aria-hidden="true" />
-              Valores disponíveis para fechamento
-            </p>
-            <p className="mt-1 text-muted-foreground">
-              Cada atendimento pertence à data de chegada ou agendamento selecionada, mesmo quando o
-              pagamento é registrado depois.
-            </p>
-          </div>
           {jaConfirmado && (
             <p role="status" className="lc-message">
               Fechamento desta data já confirmado. Novos atendimentos e ajustes serão considerados

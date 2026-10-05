@@ -17,6 +17,7 @@ export function LogoAutoClean({ className }: { className?: string }) {
         alt="Auto Clean"
         width={1024}
         height={1024}
+        decoding="async"
         className="size-full object-contain"
         onError={() => setIndisponivel(true)}
       />

@@ -721,7 +721,8 @@ describe("interface operacional", () => {
 
     fireEvent.click(fechamento);
     expect(fechamento).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByText("Valores disponíveis para fechamento")).toBeInTheDocument();
+    expect(screen.queryByText("Valores disponíveis para fechamento")).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Atendimentos incluídos" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Confirmar fechamento" })).toBeInTheDocument();
   });
 
