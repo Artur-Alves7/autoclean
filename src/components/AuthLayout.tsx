@@ -30,7 +30,7 @@ export function AuthLayout({ children }: { children: ReactNode }) {
       <section className="flex min-h-dvh flex-col items-center justify-center px-4 py-8 sm:px-10 sm:py-12">
         <div className="w-full max-w-sm">
           <div className="mb-8 flex items-center gap-4 rounded-2xl border bg-card p-3 shadow-sm lg:hidden">
-            <LogoAutoClean className="size-16 rounded-xl object-contain sm:size-20" />
+            <LogoAutoClean className="lc-mobile-logo object-contain" />
             <div>
               <p className="lc-brand">Auto Clean</p>
               <p className="mt-1 text-xs text-muted-foreground">Gestão do lava jato</p>

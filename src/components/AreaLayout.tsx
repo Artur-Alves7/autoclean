@@ -56,7 +56,7 @@ export function AreaLayout({
       <div className="min-w-0 lg:grid lg:h-dvh lg:grid-rows-[auto_minmax(0,1fr)] lg:overflow-hidden">
         <header className="sticky top-0 z-30 flex min-h-16 items-center justify-between gap-2 border-b bg-card/95 px-3 backdrop-blur-md sm:min-h-20 sm:gap-3 sm:px-6 lg:static lg:px-8 xl:px-10">
           <div className="flex min-w-0 items-center gap-3">
-            <LogoAutoClean className="size-11 shrink-0 rounded-lg object-contain sm:size-12 lg:hidden" />
+            <LogoAutoClean className="lc-mobile-logo object-contain lg:hidden" />
             <div className="min-w-0">
               <p className="lc-eyebrow hidden lg:block">Auto Clean / Gestão</p>
               <p className="truncate text-sm font-semibold sm:text-base">{secao ?? titulo}</p>
