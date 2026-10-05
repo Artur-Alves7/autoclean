@@ -7,7 +7,7 @@ import { Fechamentos } from "@/components/Fechamentos";
 import { LogoAutoClean } from "@/components/LogoAutoClean";
 import { PainelSistema } from "@/components/PainelSistema";
 import { StatusBadge } from "@/components/StatusBadge";
-import { dataLocalIso } from "@/lib/fechamento";
+import { dataLocalIso, deslocarDataLocal } from "@/lib/fechamento";
 
 const mocks = vi.hoisted(() => ({
   rpc: vi.fn().mockResolvedValue({ error: null }),
@@ -113,6 +113,18 @@ function renderFechamentos(
 ) {
   const qc = clienteDeTeste([]);
   const hoje = dataLocalIso();
+  const dataAnterior = deslocarDataLocal(hoje, -1);
+  const fechamentoAnterior = {
+    id: "fechamento-anterior",
+    data_operacao: dataAnterior,
+    status: "confirmado",
+    confirmado_em: `${dataAnterior}T18:00:00-03:00`,
+  };
+  qc.setQueryData(["historico-fechamentos"], [fechamentoAnterior]);
+  qc.setQueryData(["fechamento-diario", dataAnterior], fechamentoAnterior);
+  qc.setQueryData(["atendimentos-fechamento", dataAnterior], []);
+  qc.setQueryData(["ajustes-repasse-pendentes", dataAnterior], []);
+  qc.setQueryData(["itens-fechamento", fechamentoAnterior.id], []);
   qc.setQueryData(
     ["atendimentos-fechamento", hoje],
     opcoes.atendimentos ?? [
@@ -690,6 +702,24 @@ describe("interface operacional", () => {
     expect(fechamento).toHaveAttribute("aria-selected", "true");
     expect(screen.getByText("Valores disponíveis para fechamento")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Confirmar fechamento" })).toBeInTheDocument();
+  });
+
+  it("abre diretamente um fechamento confirmado de uma data passada", () => {
+    renderFechamentos("administrador");
+    const dataAnterior = deslocarDataLocal(dataLocalIso(), -1);
+    const dataFormatada = new Date(`${dataAnterior}T12:00:00`).toLocaleDateString("pt-BR");
+
+    fireEvent.click(screen.getByText("Fechamentos anteriores"));
+    fireEvent.click(screen.getByRole("button", { name: `Abrir fechamento de ${dataFormatada}` }));
+
+    expect(
+      screen.getByRole("dialog", { name: `Fechamento de ${dataFormatada}` }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Selecionar data dos repasses")).toHaveValue(dataAnterior);
+    expect(screen.getByRole("tab", { name: "Preparar fechamento", hidden: true })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
   });
 
   it("bloqueia dois cliques rápidos ao registrar a entrega", async () => {

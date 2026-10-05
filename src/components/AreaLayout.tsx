@@ -39,9 +39,7 @@ export function AreaLayout({
       <aside className="lc-sidebar sticky top-0 hidden h-dvh flex-col px-4 py-6 lg:flex">
         <div className="mb-8 px-3">
           <LogoAutoClean className="mb-4 aspect-square w-full rounded-xl object-contain" />
-          <p className="lc-brand text-white">
-            Auto Clean<span className="text-[var(--brand-cyan)]">.</span>
-          </p>
+          <p className="lc-brand text-white">Auto Clean</p>
           <p className="mt-1 text-xs text-sidebar-foreground/70">Gestão do lava jato</p>
         </div>
         <p className="mb-3 px-4 text-[10px] font-semibold uppercase tracking-[0.18em] text-sidebar-foreground/60">

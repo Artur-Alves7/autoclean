@@ -72,6 +72,13 @@ type ItemFechamentoConfirmado = {
   destinatario: { nome_completo: string } | null;
 };
 
+type FechamentoHistorico = {
+  id: string;
+  data_operacao: string;
+  status: string;
+  confirmado_em: string | null;
+};
+
 type FormaPagamento = "dinheiro" | "pix" | "debito" | "credito" | "outro";
 
 type CorrecaoAtendimento = {
@@ -118,6 +125,21 @@ export function Fechamentos({ perfilId, papel }: { perfilId: string; papel: Pape
         .maybeSingle();
       if (error) throw error;
       return linha as { id: string; status: string; confirmado_em: string | null } | null;
+    },
+  });
+
+  const historicoFechamentos = useQuery({
+    queryKey: ["historico-fechamentos"],
+    enabled: papel === "administrador",
+    queryFn: async () => {
+      const { data: linhas, error } = await db()
+        .from("fechamentos_diarios")
+        .select("id, data_operacao, status, confirmado_em")
+        .eq("status", "confirmado")
+        .lt("data_operacao", hoje)
+        .order("data_operacao", { ascending: false });
+      if (error) throw error;
+      return (linhas ?? []) as FechamentoHistorico[];
     },
   });
 
@@ -262,6 +284,7 @@ export function Fechamentos({ perfilId, papel }: { perfilId: string; papel: Pape
       });
       qc.invalidateQueries({ queryKey: ["atendimentos-fechamento"] });
       qc.invalidateQueries({ queryKey: ["ajustes-repasse-pendentes"] });
+      qc.invalidateQueries({ queryKey: ["historico-fechamentos"] });
     },
     onError: (erro) => setMensagem(mensagemErro(erro)),
   });
@@ -302,6 +325,11 @@ export function Fechamentos({ perfilId, papel }: { perfilId: string; papel: Pape
     setPendentes([]);
     setMensagem(null);
     setAbrirDetalhes(false);
+  };
+  const abrirFechamentoAnterior = (fechamento: FechamentoHistorico) => {
+    selecionarData(fechamento.data_operacao);
+    setVisao("fechamento");
+    setAbrirDetalhes(true);
   };
   const gerarLinhasMovimento = (itens: AtendimentoFechamento[]) =>
     itens.flatMap((item) => {
@@ -575,6 +603,81 @@ export function Fechamentos({ perfilId, papel }: { perfilId: string; papel: Pape
           </Button>
         </div>
       </div>
+
+      <details className="lc-panel group">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 [&::-webkit-details-marker]:hidden">
+          <div>
+            <p className="lc-eyebrow">Consulta</p>
+            <h2 className="mt-1 font-semibold">Fechamentos anteriores</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Abra um fechamento confirmado de uma data passada.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            {!!historicoFechamentos.data?.length && (
+              <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-semibold">
+                {historicoFechamentos.data.length}
+              </span>
+            )}
+            <ChevronDown
+              className="size-5 text-muted-foreground transition-transform group-open:rotate-180"
+              aria-hidden="true"
+            />
+          </div>
+        </summary>
+        <div className="mt-4 border-t pt-4">
+          {historicoFechamentos.isLoading && (
+            <p role="status" className="text-sm text-muted-foreground">
+              Carregando fechamentos anteriores...
+            </p>
+          )}
+          {historicoFechamentos.error && (
+            <p role="alert" className="lc-message">
+              {mensagemErro(historicoFechamentos.error)}
+            </p>
+          )}
+          {historicoFechamentos.data?.length === 0 && (
+            <div className="lc-empty">
+              <FolderOpen aria-hidden="true" />
+              Nenhum fechamento anterior confirmado.
+            </div>
+          )}
+          {!!historicoFechamentos.data?.length && (
+            <ul className="grid max-h-80 gap-2 overflow-y-auto sm:grid-cols-2">
+              {historicoFechamentos.data.map((fechamento) => {
+                const dataFormatada = new Date(
+                  `${fechamento.data_operacao}T12:00:00`,
+                ).toLocaleDateString("pt-BR");
+                return (
+                  <li
+                    key={fechamento.id}
+                    className="flex items-center justify-between gap-3 rounded-xl border bg-muted/30 p-3"
+                  >
+                    <span className="min-w-0 text-sm">
+                      <strong className="block">{dataFormatada}</strong>
+                      <span className="text-xs text-muted-foreground">
+                        {fechamento.confirmado_em
+                          ? `Confirmado em ${formatarDataHora(fechamento.confirmado_em)}`
+                          : "Fechamento confirmado"}
+                      </span>
+                    </span>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      aria-label={`Abrir fechamento de ${dataFormatada}`}
+                      onClick={() => abrirFechamentoAnterior(fechamento)}
+                    >
+                      <FolderOpen aria-hidden="true" />
+                      Abrir
+                    </Button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+      </details>
 
       <div
         className="grid grid-cols-2 rounded-xl border bg-muted/60 p-1"
