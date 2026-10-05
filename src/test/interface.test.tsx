@@ -171,7 +171,7 @@ describe("interface operacional", () => {
   it("preserva uma margem interna para a logo não ser cortada nos cantos", () => {
     render(<LogoAutoClean className="rounded-xl" />);
     const logo = screen.getByAltText("Auto Clean");
-    expect(logo.parentElement).toHaveClass("overflow-hidden", "p-[6%]", "rounded-xl");
+    expect(logo.parentElement).toHaveClass("overflow-hidden", "p-[3%]", "rounded-xl");
   });
 
   it("mantém rótulos textuais para todos os status, além das cores", () => {
