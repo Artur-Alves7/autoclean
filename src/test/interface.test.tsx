@@ -513,6 +513,8 @@ describe("interface operacional", () => {
         expect.objectContaining({
           p_novo_status: "cancelado",
           p_motivo: "Cliente desistiu do serviço",
+          p_valor_final: null,
+          p_pagamentos: null,
         }),
       ),
     );
@@ -694,7 +696,7 @@ describe("interface operacional", () => {
     );
   });
 
-  it("não substitui pagamentos ao avançar uma etapa sem entrega", async () => {
+  it("preserva o valor já informado ao avançar uma etapa sem entrega", async () => {
     renderFila([{ ...filaTeste[0]!, status: "em_lavagem", valor_final: 100 }]);
     fireEvent.click(screen.getByRole("button", { name: "Marcar como pronto" }));
     fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
@@ -703,6 +705,7 @@ describe("interface operacional", () => {
         "rpc_avancar_atendimento",
         expect.objectContaining({
           p_novo_status: "pronto_para_retirada",
+          p_valor_final: null,
           p_pagamentos: null,
         }),
       ),
