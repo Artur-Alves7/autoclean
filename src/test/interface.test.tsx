@@ -116,23 +116,12 @@ function renderFechamentos(
 ) {
   const qc = clienteDeTeste([]);
   const hoje = dataLocalIso();
-  const dataAnterior = deslocarDataLocal(hoje, -1);
-  const fechamentoAnterior = {
-    id: "fechamento-anterior",
-    data_operacao: dataAnterior,
-    status: "confirmado",
-    confirmado_em: `${dataAnterior}T18:00:00-03:00`,
-  };
-  qc.setQueryData(["historico-fechamentos"], [fechamentoAnterior]);
-  qc.setQueryData(["fechamento-diario", dataAnterior], fechamentoAnterior);
-  qc.setQueryData(["atendimentos-fechamento", dataAnterior], []);
-  qc.setQueryData(["ajustes-repasse-pendentes", dataAnterior], []);
-  qc.setQueryData(["itens-fechamento", fechamentoAnterior.id], []);
   qc.setQueryData(
     ["atendimentos-fechamento", hoje],
     opcoes.atendimentos ?? [
       {
         id: "atendimento-entregue-teste",
+        chegou_em: `${hoje}T10:00:00-03:00`,
         entregue_em: `${hoje}T12:00:00-03:00`,
         nome_cliente_snapshot: "Cliente de teste",
         veiculo_snapshot: "Veículo de teste",
@@ -154,6 +143,7 @@ function renderFechamentos(
       opcoes.atendimentos ?? [
         {
           id: "atendimento-entregue-teste",
+          chegou_em: `${hoje}T10:00:00-03:00`,
           entregue_em: `${hoje}T12:00:00-03:00`,
           nome_cliente_snapshot: "Cliente de teste",
           veiculo_snapshot: "Veículo de teste",
@@ -221,6 +211,7 @@ describe("interface operacional", () => {
     }
     expect(screen.getByLabelText("Selecionar data da operação")).not.toHaveAttribute("max");
     expect(screen.getByRole("button", { name: "Próximo dia" })).toBeEnabled();
+    expect(screen.queryByLabelText("Resumo do dia")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Baixar relatório" })).not.toBeInTheDocument();
   });
 
@@ -734,22 +725,10 @@ describe("interface operacional", () => {
     expect(screen.getByRole("button", { name: "Confirmar fechamento" })).toBeInTheDocument();
   });
 
-  it("abre diretamente um fechamento confirmado de uma data passada", () => {
+  it("remove a consulta redundante de fechamentos anteriores", () => {
     renderFechamentos("administrador");
-    const dataAnterior = deslocarDataLocal(dataLocalIso(), -1);
-    const dataFormatada = new Date(`${dataAnterior}T12:00:00`).toLocaleDateString("pt-BR");
-
-    fireEvent.click(screen.getByText("Fechamentos anteriores"));
-    fireEvent.click(screen.getByRole("button", { name: `Abrir fechamento de ${dataFormatada}` }));
-
-    expect(
-      screen.getByRole("dialog", { name: `Fechamento de ${dataFormatada}` }),
-    ).toBeInTheDocument();
-    expect(screen.getByLabelText("Selecionar data dos repasses")).toHaveValue(dataAnterior);
-    expect(screen.getByRole("tab", { name: "Preparar fechamento", hidden: true })).toHaveAttribute(
-      "aria-selected",
-      "true",
-    );
+    expect(screen.queryByText("Fechamentos anteriores")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Selecionar data dos repasses")).toBeInTheDocument();
   });
 
   it("bloqueia dois cliques rápidos ao registrar a entrega", async () => {

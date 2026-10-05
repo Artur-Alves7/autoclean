@@ -34,6 +34,7 @@ import { db, formatarDinheiro, formatarDataHora, mensagemErro } from "@/lib/supa
 
 type AtendimentoFechamento = {
   id: string;
+  chegou_em: string;
   entregue_em: string;
   nome_cliente_snapshot: string;
   veiculo_snapshot: string;
@@ -63,13 +64,6 @@ type ItemFechamentoConfirmado = {
     servico_snapshot: string;
   } | null;
   destinatario: { nome_completo: string } | null;
-};
-
-type FechamentoHistorico = {
-  id: string;
-  data_operacao: string;
-  status: string;
-  confirmado_em: string | null;
 };
 
 type FormaPagamento = "dinheiro" | "pix" | "debito" | "credito" | "outro";
@@ -133,21 +127,6 @@ export function Fechamentos({
     },
   });
 
-  const historicoFechamentos = useQuery({
-    queryKey: ["historico-fechamentos"],
-    enabled: papel === "administrador",
-    queryFn: async () => {
-      const { data: linhas, error } = await db()
-        .from("fechamentos_diarios")
-        .select("id, data_operacao, status, confirmado_em")
-        .eq("status", "confirmado")
-        .lt("data_operacao", hoje)
-        .order("data_operacao", { ascending: false });
-      if (error) throw error;
-      return (linhas ?? []) as FechamentoHistorico[];
-    },
-  });
-
   const historicoDia = useQuery({
     queryKey: ["historico-atendimentos", data],
     enabled: papel === "administrador" && visao === "movimento",
@@ -155,12 +134,12 @@ export function Fechamentos({
       const { data: linhas, error } = await db()
         .from("vw_painel_atendimentos")
         .select(
-          "id, entregue_em, nome_cliente_snapshot, veiculo_snapshot, servico_snapshot, valor_final, valor_empresa_snapshot, total_pago, lavadores",
+          "id, chegou_em, entregue_em, nome_cliente_snapshot, veiculo_snapshot, servico_snapshot, valor_final, valor_empresa_snapshot, total_pago, lavadores",
         )
         .eq("status", "entregue")
-        .gte("entregue_em", intervalo.inicio)
-        .lt("entregue_em", intervalo.fim)
-        .order("entregue_em");
+        .gte("chegou_em", intervalo.inicio)
+        .lt("chegou_em", intervalo.fim)
+        .order("chegou_em");
       if (error) throw error;
       return (linhas ?? []) as unknown as AtendimentoFechamento[];
     },
@@ -287,7 +266,6 @@ export function Fechamentos({
       });
       qc.invalidateQueries({ queryKey: ["atendimentos-fechamento"] });
       qc.invalidateQueries({ queryKey: ["ajustes-repasse-pendentes"] });
-      qc.invalidateQueries({ queryKey: ["historico-fechamentos"] });
     },
     onError: (erro) => setMensagem(mensagemErro(erro)),
   });
@@ -324,7 +302,6 @@ export function Fechamentos({
       setErroReabertura(null);
       setAbrirDetalhes(false);
       setMensagem("Fechamento reaberto. Inclua os lançamentos retroativos e confirme novamente.");
-      qc.invalidateQueries({ queryKey: ["historico-fechamentos"] });
       qc.invalidateQueries({ queryKey: ["atendimentos-fechamento", data] });
       qc.invalidateQueries({ queryKey: ["ajustes-repasse-pendentes", data] });
     },
@@ -357,11 +334,6 @@ export function Fechamentos({
     setPendentes([]);
     setMensagem(null);
     setAbrirDetalhes(false);
-  };
-  const abrirFechamentoAnterior = (fechamento: FechamentoHistorico) => {
-    selecionarData(fechamento.data_operacao);
-    setVisao("fechamento");
-    setAbrirDetalhes(true);
   };
   const baixarRelatorioFechamento = () => {
     baixarCsv(
@@ -538,81 +510,6 @@ export function Fechamentos({
         </div>
       </div>
 
-      <details className="lc-panel group">
-        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 [&::-webkit-details-marker]:hidden">
-          <div>
-            <p className="lc-eyebrow">Consulta</p>
-            <h2 className="mt-1 font-semibold">Fechamentos anteriores</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Abra um fechamento confirmado de uma data passada.
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            {!!historicoFechamentos.data?.length && (
-              <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-semibold">
-                {historicoFechamentos.data.length}
-              </span>
-            )}
-            <ChevronDown
-              className="size-5 text-muted-foreground transition-transform group-open:rotate-180"
-              aria-hidden="true"
-            />
-          </div>
-        </summary>
-        <div className="mt-4 border-t pt-4">
-          {historicoFechamentos.isLoading && (
-            <p role="status" className="text-sm text-muted-foreground">
-              Carregando fechamentos anteriores...
-            </p>
-          )}
-          {historicoFechamentos.error && (
-            <p role="alert" className="lc-message">
-              {mensagemErro(historicoFechamentos.error)}
-            </p>
-          )}
-          {historicoFechamentos.data?.length === 0 && (
-            <div className="lc-empty">
-              <FolderOpen aria-hidden="true" />
-              Nenhum fechamento anterior confirmado.
-            </div>
-          )}
-          {!!historicoFechamentos.data?.length && (
-            <ul className="grid max-h-80 gap-2 overflow-y-auto sm:grid-cols-2">
-              {historicoFechamentos.data.map((fechamento) => {
-                const dataFormatada = new Date(
-                  `${fechamento.data_operacao}T12:00:00`,
-                ).toLocaleDateString("pt-BR");
-                return (
-                  <li
-                    key={fechamento.id}
-                    className="flex items-center justify-between gap-3 rounded-xl border bg-muted/30 p-3"
-                  >
-                    <span className="min-w-0 text-sm">
-                      <strong className="block">{dataFormatada}</strong>
-                      <span className="text-xs text-muted-foreground">
-                        {fechamento.confirmado_em
-                          ? `Confirmado em ${formatarDataHora(fechamento.confirmado_em)}`
-                          : "Fechamento confirmado"}
-                      </span>
-                    </span>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      aria-label={`Abrir fechamento de ${dataFormatada}`}
-                      onClick={() => abrirFechamentoAnterior(fechamento)}
-                    >
-                      <FolderOpen aria-hidden="true" />
-                      Abrir
-                    </Button>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </div>
-      </details>
-
       <div
         className="grid grid-cols-2 rounded-xl border bg-muted/60 p-1"
         role="tablist"
@@ -772,8 +669,8 @@ export function Fechamentos({
               Valores disponíveis para fechamento
             </p>
             <p className="mt-1 text-muted-foreground">
-              Esta etapa também pode incluir atendimentos pendentes de dias anteriores. Revise a
-              lista antes de confirmar.
+              Cada atendimento pertence à data de chegada ou agendamento selecionada, mesmo quando o
+              pagamento é registrado depois.
             </p>
           </div>
           {jaConfirmado && (
@@ -854,7 +751,7 @@ export function Fechamentos({
             {atendimentos.data?.length === 0 && (
               <div className="lc-empty">
                 <Wallet aria-hidden="true" />
-                Nenhum atendimento elegível até esta data.
+                Nenhum atendimento entregue pertence a esta data.
               </div>
             )}
             <ul className="space-y-3">
@@ -887,6 +784,7 @@ export function Fechamentos({
                         <span
                           className={inconsistente ? "text-destructive" : "text-muted-foreground"}
                         >
+                          Atendimento: {formatarDataHora(item.chegou_em)} · Entrega:{" "}
                           {formatarDataHora(item.entregue_em)} · Pago:{" "}
                           {formatarDinheiro(item.total_pago)} · {item.lavadores.length} lavador(es)
                           {inconsistente ? " · Corrigir antes de fechar" : ""}

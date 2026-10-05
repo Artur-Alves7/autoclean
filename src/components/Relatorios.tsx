@@ -32,7 +32,7 @@ type AtendimentoRelatorio = {
 };
 
 type AtendimentoRepasse = {
-  entregue_em: string;
+  chegou_em: string;
   nome_cliente_snapshot: string;
   veiculo_snapshot: string;
   servico_snapshot: string;
@@ -123,13 +123,13 @@ export function Relatorios({ perfilId, papel }: { perfilId: string; papel: Papel
     let consulta = db()
       .from("vw_painel_atendimentos")
       .select(
-        "entregue_em, nome_cliente_snapshot, veiculo_snapshot, servico_snapshot, valor_final, valor_empresa_snapshot, lavadores",
+        "chegou_em, nome_cliente_snapshot, veiculo_snapshot, servico_snapshot, valor_final, valor_empresa_snapshot, lavadores",
       )
       .eq("status", "entregue");
     if (intervalo) {
-      consulta = consulta.gte("entregue_em", intervalo.inicio).lt("entregue_em", intervalo.fim);
+      consulta = consulta.gte("chegou_em", intervalo.inicio).lt("chegou_em", intervalo.fim);
     }
-    const { data, error } = await consulta.order("entregue_em");
+    const { data, error } = await consulta.order("chegou_em");
     if (error) throw error;
     const itens = (data ?? []) as unknown as AtendimentoRepasse[];
     if (!itens.length) throw new Error("Nenhum repasse encontrado no período selecionado.");
@@ -143,7 +143,7 @@ export function Relatorios({ perfilId, papel }: { perfilId: string; papel: Papel
         : [];
       return [
         [
-          formatarDataHora(item.entregue_em),
+          formatarDataHora(item.chegou_em),
           item.nome_cliente_snapshot,
           item.veiculo_snapshot,
           item.servico_snapshot,
@@ -152,7 +152,7 @@ export function Relatorios({ perfilId, papel }: { perfilId: string; papel: Papel
           formatarDinheiro(empresaCentavos / 100),
         ],
         ...lavadores.map((lavador, indice) => [
-          formatarDataHora(item.entregue_em),
+          formatarDataHora(item.chegou_em),
           item.nome_cliente_snapshot,
           item.veiculo_snapshot,
           item.servico_snapshot,
@@ -163,7 +163,7 @@ export function Relatorios({ perfilId, papel }: { perfilId: string; papel: Papel
         ...(lavadores.length === 0 && valorCentavos > empresaCentavos
           ? [
               [
-                formatarDataHora(item.entregue_em),
+                formatarDataHora(item.chegou_em),
                 item.nome_cliente_snapshot,
                 item.veiculo_snapshot,
                 item.servico_snapshot,
@@ -177,7 +177,7 @@ export function Relatorios({ perfilId, papel }: { perfilId: string; papel: Papel
     });
     baixarCsv(
       `repasses-${sufixoRelatorio(filtro)}.csv`,
-      ["Data e hora", "Cliente", "Veículo", "Serviço", "Destinatário", "Tipo", "Valor"],
+      ["Data do atendimento", "Cliente", "Veículo", "Serviço", "Destinatário", "Tipo", "Valor"],
       linhas,
     );
   }

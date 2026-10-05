@@ -216,21 +216,6 @@ export function FilaAtendimentos({
           </Button>
         </div>
       </div>
-      <div className="grid grid-cols-2 gap-2 sm:gap-3 xl:grid-cols-4" aria-label="Resumo do dia">
-        {ETAPAS.map(({ status, nome, icone: Icone }) => (
-          <div key={status} className="lc-stat !gap-2 !p-3 sm:!gap-3 sm:!p-4">
-            <span className="lc-status !rounded-xl !p-2.5 sm:!p-3" data-status={status}>
-              <Icone className="!size-5" aria-hidden="true" />
-            </span>
-            <div>
-              <strong>
-                {fila.data ? fila.data.filter((item) => item.status === status).length : "—"}
-              </strong>
-              <p>{nome}</p>
-            </div>
-          </div>
-        ))}
-      </div>
       {fila.isLoading && (
         <p
           role="status"
