@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { DialogoFormulario } from "@/components/DialogoFormulario";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import {
   Building2,
   CalendarDays,
@@ -9,6 +10,8 @@ import {
   ChevronLeft,
   ChevronRight,
   CircleAlert,
+  Download,
+  FolderOpen,
   LoaderCircle,
   ReceiptText,
   type LucideIcon,
@@ -25,7 +28,8 @@ import {
   deslocarDataLocal,
   intervaloDataLocal,
 } from "@/lib/fechamento";
-import { reaisParaCentavos } from "@/lib/regras";
+import { dividirRepasseCentavos, reaisParaCentavos } from "@/lib/regras";
+import { baixarCsv } from "@/lib/relatorios";
 import { db, formatarDinheiro, formatarDataHora, mensagemErro } from "@/lib/supabase-db";
 
 type AtendimentoFechamento = {
@@ -47,6 +51,20 @@ type Repasse = {
   fechamentos_diarios: { data_operacao: string; status: string } | null;
 };
 
+type ItemFechamentoConfirmado = {
+  id: string;
+  atendimento_id: string | null;
+  tipo_destinatario: "empresa" | "lavador";
+  tipo_lancamento: "repasse" | "ajuste";
+  valor: number;
+  atendimentos: {
+    nome_cliente_snapshot: string;
+    veiculo_snapshot: string;
+    servico_snapshot: string;
+  } | null;
+  destinatario: { nome_completo: string } | null;
+};
+
 type FormaPagamento = "dinheiro" | "pix" | "debito" | "credito" | "outro";
 
 type CorrecaoAtendimento = {
@@ -65,6 +83,7 @@ export function Fechamentos({ perfilId, papel }: { perfilId: string; papel: Pape
   const [mensagem, setMensagem] = useState<string | null>(null);
   const [correcao, setCorrecao] = useState<CorrecaoAtendimento | null>(null);
   const [erroCorrecao, setErroCorrecao] = useState<string | null>(null);
+  const [abrirDetalhes, setAbrirDetalhes] = useState(false);
   const fechandoRef = useRef(false);
   const intervalo = intervaloDataLocal(data);
 
@@ -144,6 +163,23 @@ export function Fechamentos({ perfilId, papel }: { perfilId: string; papel: Pape
     },
   });
 
+  const itensFechamento = useQuery({
+    queryKey: ["itens-fechamento", fechamentoDia.data?.id],
+    enabled: papel === "administrador" && abrirDetalhes && !!fechamentoDia.data?.id,
+    queryFn: async () => {
+      const { data: linhas, error } = await db()
+        .from("itens_fechamento")
+        .select(
+          "id, atendimento_id, tipo_destinatario, tipo_lancamento, valor, atendimentos(nome_cliente_snapshot, veiculo_snapshot, servico_snapshot), destinatario:perfis!itens_fechamento_perfil_destinatario_id_fkey(nome_completo)",
+        )
+        .eq("fechamento_diario_id", fechamentoDia.data!.id)
+        .order("tipo_destinatario")
+        .order("criado_em");
+      if (error) throw error;
+      return (linhas ?? []) as unknown as ItemFechamentoConfirmado[];
+    },
+  });
+
   const resumo = useMemo(() => {
     return calcularResumoFechamento(atendimentos.data ?? [], pendentes);
   }, [atendimentos.data, pendentes]);
@@ -163,6 +199,31 @@ export function Fechamentos({ perfilId, papel }: { perfilId: string; papel: Pape
     (total, item) => total + Number(item.valor),
     0,
   );
+  const resumoConfirmado = useMemo(() => {
+    const itens = itensFechamento.data ?? [];
+    const porDestinatario = new Map<string, number>();
+    const atendimentosUnicos = new Set<string>();
+    let empresa = 0;
+    let equipe = 0;
+    for (const item of itens) {
+      const valor = Number(item.valor);
+      if (item.atendimento_id) atendimentosUnicos.add(item.atendimento_id);
+      if (item.tipo_destinatario === "empresa") empresa += valor;
+      else equipe += valor;
+      const nome =
+        item.tipo_destinatario === "empresa"
+          ? "Empresa"
+          : (item.destinatario?.nome_completo ?? "Lavador");
+      porDestinatario.set(nome, (porDestinatario.get(nome) ?? 0) + valor);
+    }
+    return {
+      empresa,
+      equipe,
+      total: empresa + equipe,
+      atendimentos: atendimentosUnicos.size,
+      porDestinatario: [...porDestinatario.entries()].sort(([a], [b]) => a.localeCompare(b)),
+    };
+  }, [itensFechamento.data]);
 
   const totalAjustesCentavos = (ajustesPendentes.data ?? []).reduce(
     (total, item) => total + reaisParaCentavos(Number(item.valor)),
@@ -232,6 +293,84 @@ export function Fechamentos({ perfilId, papel }: { perfilId: string; papel: Pape
     setData(novaData || hoje);
     setPendentes([]);
     setMensagem(null);
+    setAbrirDetalhes(false);
+  };
+  const baixarRelatorioMovimento = () => {
+    const linhas = (historicoDia.data ?? []).flatMap((item) => {
+      const valorCentavos = reaisParaCentavos(Number(item.valor_final));
+      const empresaCentavos = reaisParaCentavos(Number(item.valor_empresa_snapshot));
+      const lavadores = [...item.lavadores].sort((a, b) => a.ordem_rateio - b.ordem_rateio);
+      const valoresLavadores = lavadores.length
+        ? dividirRepasseCentavos(valorCentavos, empresaCentavos, lavadores.length)
+        : [];
+      return [
+        [
+          formatarDataHora(item.entregue_em),
+          item.nome_cliente_snapshot,
+          item.veiculo_snapshot,
+          item.servico_snapshot,
+          "Empresa",
+          "Repasse",
+          formatarDinheiro(empresaCentavos / 100),
+        ],
+        ...lavadores.map((lavador, indice) => [
+          formatarDataHora(item.entregue_em),
+          item.nome_cliente_snapshot,
+          item.veiculo_snapshot,
+          item.servico_snapshot,
+          lavador.nome,
+          "Repasse",
+          formatarDinheiro(valoresLavadores[indice]! / 100),
+        ]),
+        ...(lavadores.length === 0 && valorCentavos > empresaCentavos
+          ? [
+              [
+                formatarDataHora(item.entregue_em),
+                item.nome_cliente_snapshot,
+                item.veiculo_snapshot,
+                item.servico_snapshot,
+                "Equipe não vinculada",
+                "Repasse pendente",
+                formatarDinheiro((valorCentavos - empresaCentavos) / 100),
+              ],
+            ]
+          : []),
+      ];
+    });
+    baixarCsv(
+      `repasses-${data}.csv`,
+      ["Data e hora", "Cliente", "Veículo", "Serviço", "Destinatário", "Tipo", "Valor"],
+      linhas,
+    );
+  };
+  const baixarRelatorioLavador = () => {
+    baixarCsv(
+      `meus-repasses-${dataLocalIso()}.csv`,
+      ["Data do fechamento", "Cliente", "Veículo", "Status", "Valor"],
+      (meusRepasses.data ?? []).map((item) => [
+        item.fechamentos_diarios?.data_operacao ?? "Sem data",
+        item.atendimentos?.nome_cliente_snapshot ?? "Atendimento",
+        item.atendimentos?.veiculo_snapshot ?? "Veículo não informado",
+        item.fechamentos_diarios?.status ?? "Sem status",
+        formatarDinheiro(item.valor),
+      ]),
+    );
+  };
+  const baixarRelatorioFechamento = () => {
+    baixarCsv(
+      `fechamento-${data}.csv`,
+      ["Cliente", "Veículo", "Serviço", "Destinatário", "Tipo", "Valor"],
+      (itensFechamento.data ?? []).map((item) => [
+        item.atendimentos?.nome_cliente_snapshot ?? "Atendimento",
+        item.atendimentos?.veiculo_snapshot ?? "Veículo não informado",
+        item.atendimentos?.servico_snapshot ?? "Serviço não informado",
+        item.tipo_destinatario === "empresa"
+          ? "Empresa"
+          : (item.destinatario?.nome_completo ?? "Lavador"),
+        item.tipo_lancamento === "ajuste" ? "Ajuste" : "Repasse",
+        formatarDinheiro(item.valor),
+      ]),
+    );
   };
 
   if (papel === "lavador") {
@@ -243,6 +382,15 @@ export function Fechamentos({ perfilId, papel }: { perfilId: string; papel: Pape
             <h1 className="mt-2">Meus repasses</h1>
             <p>Consulte seus valores por dia e os veículos vinculados a cada repasse.</p>
           </div>
+          <Button
+            variant="outline"
+            className="w-full sm:w-auto"
+            disabled={!meusRepasses.data?.length}
+            onClick={baixarRelatorioLavador}
+          >
+            <Download aria-hidden="true" />
+            Baixar relatório
+          </Button>
         </div>
         {meusRepasses.isLoading && (
           <p role="status" className="text-sm text-muted-foreground">
@@ -445,12 +593,23 @@ export function Fechamentos({ perfilId, papel }: { perfilId: string; papel: Pape
 
       {visao === "movimento" ? (
         <>
-          <div>
-            <p className="lc-eyebrow">Movimento do dia selecionado</p>
-            <h2 className="mt-1 text-lg font-semibold">Como o valor foi distribuído</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Considera somente os serviços concluídos nesta data.
-            </p>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <p className="lc-eyebrow">Movimento do dia selecionado</p>
+              <h2 className="mt-1 text-lg font-semibold">Como o valor foi distribuído</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Considera somente os serviços concluídos nesta data.
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              className="w-full sm:w-auto"
+              disabled={!historicoDia.data?.length}
+              onClick={baixarRelatorioMovimento}
+            >
+              <Download aria-hidden="true" />
+              Baixar relatório
+            </Button>
           </div>
           <div className="grid gap-3 sm:grid-cols-3">
             <Resumo
@@ -693,29 +852,35 @@ export function Fechamentos({ perfilId, papel }: { perfilId: string; papel: Pape
                 A confirmação registra os valores da empresa e de cada lavador.
               </p>
             </div>
-            <Button
-              disabled={
-                fechar.isPending ||
-                fechamentoDia.isLoading ||
-                ajustesPendentes.isLoading ||
-                jaConfirmado ||
-                !possuiLancamentos
-              }
-              aria-busy={fechar.isPending}
-              onClick={confirmarFechamento}
-              className="w-full sm:w-fit"
-            >
-              {fechar.isPending ? (
-                <LoaderCircle className="animate-spin" aria-hidden="true" />
-              ) : (
-                <CheckCheck aria-hidden="true" />
-              )}
-              {fechar.isPending
-                ? "Confirmando..."
-                : jaConfirmado
-                  ? "Fechamento confirmado"
-                  : "Confirmar fechamento"}
-            </Button>
+            {jaConfirmado ? (
+              <Button
+                type="button"
+                onClick={() => setAbrirDetalhes(true)}
+                className="w-full sm:w-fit"
+              >
+                <FolderOpen aria-hidden="true" />
+                Abrir fechamento
+              </Button>
+            ) : (
+              <Button
+                disabled={
+                  fechar.isPending ||
+                  fechamentoDia.isLoading ||
+                  ajustesPendentes.isLoading ||
+                  !possuiLancamentos
+                }
+                aria-busy={fechar.isPending}
+                onClick={confirmarFechamento}
+                className="w-full sm:w-fit"
+              >
+                {fechar.isPending ? (
+                  <LoaderCircle className="animate-spin" aria-hidden="true" />
+                ) : (
+                  <CheckCheck aria-hidden="true" />
+                )}
+                {fechar.isPending ? "Confirmando..." : "Confirmar fechamento"}
+              </Button>
+            )}
           </div>
         </>
       )}
@@ -724,6 +889,107 @@ export function Fechamentos({ perfilId, papel }: { perfilId: string; papel: Pape
           {mensagem}
         </p>
       )}
+      <Dialog open={abrirDetalhes} onOpenChange={setAbrirDetalhes}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
+          <div className="pr-6">
+            <p className="lc-eyebrow">Fechamento confirmado</p>
+            <DialogTitle className="mt-2">
+              Fechamento de {new Date(`${data}T12:00:00`).toLocaleDateString("pt-BR")}
+            </DialogTitle>
+            <DialogDescription className="mt-1">
+              Consulte os valores registrados. Este histórico permanece protegido contra edição.
+            </DialogDescription>
+          </div>
+          {itensFechamento.isLoading && (
+            <p role="status" className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
+              <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
+              Carregando fechamento...
+            </p>
+          )}
+          {itensFechamento.error && (
+            <p role="alert" className="lc-message">
+              {mensagemErro(itensFechamento.error)}
+            </p>
+          )}
+          {itensFechamento.data && (
+            <>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <Resumo rotulo="Total fechado" valor={formatarDinheiro(resumoConfirmado.total)} />
+                <Resumo
+                  rotulo="Parte da empresa"
+                  valor={formatarDinheiro(resumoConfirmado.empresa)}
+                />
+                <Resumo
+                  rotulo="Parte da equipe"
+                  valor={formatarDinheiro(resumoConfirmado.equipe)}
+                />
+              </div>
+              <section aria-labelledby="destinatarios-fechamento">
+                <div className="mb-3 flex items-end justify-between gap-3">
+                  <div>
+                    <h3 id="destinatarios-fechamento" className="font-semibold">
+                      Distribuição registrada
+                    </h3>
+                    <p className="text-sm text-muted-foreground">
+                      {resumoConfirmado.atendimentos} atendimento(s) neste fechamento
+                    </p>
+                  </div>
+                </div>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {resumoConfirmado.porDestinatario.map(([nome, valor]) => (
+                    <div
+                      key={nome}
+                      className="flex items-center justify-between gap-3 rounded-xl border bg-muted/40 p-3 text-sm"
+                    >
+                      <span className="font-medium">{nome}</span>
+                      <strong className="tabular-nums">{formatarDinheiro(valor)}</strong>
+                    </div>
+                  ))}
+                </div>
+              </section>
+              <section aria-labelledby="lancamentos-fechamento">
+                <h3 id="lancamentos-fechamento" className="mb-3 font-semibold">
+                  Lançamentos
+                </h3>
+                {itensFechamento.data.length === 0 ? (
+                  <div className="lc-empty">Nenhum lançamento encontrado neste fechamento.</div>
+                ) : (
+                  <ul className="max-h-72 divide-y overflow-y-auto rounded-xl border">
+                    {itensFechamento.data.map((item) => (
+                      <li
+                        key={item.id}
+                        className="flex flex-col gap-2 px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between"
+                      >
+                        <span className="min-w-0">
+                          <strong>
+                            {item.tipo_destinatario === "empresa"
+                              ? "Empresa"
+                              : (item.destinatario?.nome_completo ?? "Lavador")}
+                          </strong>
+                          <span className="block truncate text-muted-foreground">
+                            {item.atendimentos?.veiculo_snapshot ?? "Atendimento"} ·{" "}
+                            {item.tipo_lancamento === "ajuste" ? "Ajuste" : "Repasse"}
+                          </span>
+                        </span>
+                        <strong className="tabular-nums">{formatarDinheiro(item.valor)}</strong>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </section>
+              <div className="flex flex-col-reverse gap-2 border-t pt-4 sm:flex-row sm:justify-end">
+                <Button variant="outline" onClick={() => setAbrirDetalhes(false)}>
+                  Fechar
+                </Button>
+                <Button disabled={!itensFechamento.data.length} onClick={baixarRelatorioFechamento}>
+                  <Download aria-hidden="true" />
+                  Baixar relatório
+                </Button>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
       <DialogoFormulario
         aberto={!!correcao}
         titulo="Corrigir atendimento entregue"

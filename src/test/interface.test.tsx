@@ -108,6 +108,7 @@ function renderFechamentos(
     fechamento?: { id: string; status: string; confirmado_em: string | null } | null;
     ajustes?: { id: string; valor: number }[];
     historico?: unknown[];
+    itensFechamento?: unknown[];
   } = {},
 ) {
   const qc = clienteDeTeste([]);
@@ -128,6 +129,9 @@ function renderFechamentos(
     ],
   );
   qc.setQueryData(["fechamento-diario", hoje], opcoes.fechamento ?? null);
+  if (opcoes.fechamento?.id) {
+    qc.setQueryData(["itens-fechamento", opcoes.fechamento.id], opcoes.itensFechamento ?? []);
+  }
   qc.setQueryData(["ajustes-repasse-pendentes", hoje], opcoes.ajustes ?? []);
   qc.setQueryData(
     ["historico-atendimentos", hoje],
@@ -202,6 +206,7 @@ describe("interface operacional", () => {
     }
     expect(screen.getByLabelText("Selecionar data da operação")).not.toHaveAttribute("max");
     expect(screen.getByRole("button", { name: "Próximo dia" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Baixar relatório" })).toBeEnabled();
   });
 
   it("diferencia agendamentos futuros na fila", () => {
@@ -662,6 +667,7 @@ describe("interface operacional", () => {
 
     expect(movimento).toHaveAttribute("aria-selected", "true");
     expect(screen.getByText("Como o valor foi distribuído")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Baixar relatório" })).toBeEnabled();
     expect(screen.queryByRole("button", { name: "Confirmar fechamento" })).not.toBeInTheDocument();
 
     fireEvent.click(fechamento);
@@ -746,18 +752,50 @@ describe("interface operacional", () => {
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
   });
 
-  it("não tenta fechar novamente uma data já confirmada", () => {
+  it("abre um fechamento confirmado sem tentar criá-lo novamente", () => {
     renderFechamentos("administrador", {
       fechamento: {
         id: "fechamento-teste",
         status: "confirmado",
         confirmado_em: "2026-10-02T18:00:00-03:00",
       },
+      itensFechamento: [
+        {
+          id: "item-empresa",
+          atendimento_id: "atendimento-entregue-teste",
+          tipo_destinatario: "empresa",
+          tipo_lancamento: "repasse",
+          valor: 40,
+          atendimentos: {
+            nome_cliente_snapshot: "Cliente de teste",
+            veiculo_snapshot: "Veículo de teste",
+            servico_snapshot: "Serviço de teste",
+          },
+          destinatario: null,
+        },
+        {
+          id: "item-lavador",
+          atendimento_id: "atendimento-entregue-teste",
+          tipo_destinatario: "lavador",
+          tipo_lancamento: "repasse",
+          valor: 60,
+          atendimentos: {
+            nome_cliente_snapshot: "Cliente de teste",
+            veiculo_snapshot: "Veículo de teste",
+            servico_snapshot: "Serviço de teste",
+          },
+          destinatario: { nome_completo: "Lavador de teste" },
+        },
+      ],
     });
 
     fireEvent.click(screen.getByRole("tab", { name: "Preparar fechamento" }));
-    expect(screen.getByRole("button", { name: "Fechamento confirmado" })).toBeDisabled();
     expect(screen.getByRole("status")).toHaveTextContent("já confirmado");
+    fireEvent.click(screen.getByRole("button", { name: "Abrir fechamento" }));
+    const dialogo = screen.getByRole("dialog", { name: /Fechamento de/ });
+    expect(within(dialogo).getByText("R$ 100,00")).toBeInTheDocument();
+    expect(within(dialogo).getAllByText("Lavador de teste")).toHaveLength(2);
+    expect(within(dialogo).getByRole("button", { name: "Baixar relatório" })).toBeEnabled();
     expect(mocks.rpc).not.toHaveBeenCalled();
   });
 

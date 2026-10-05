@@ -8,6 +8,7 @@ import {
   ChevronRight,
   Clock3,
   CreditCard,
+  Download,
   Droplets,
   LoaderCircle,
   PencilLine,
@@ -31,6 +32,7 @@ import {
   prepararBuscaCliente,
 } from "@/lib/atendimento";
 import { dataLocalIso, deslocarDataLocal, intervaloDataLocal } from "@/lib/fechamento";
+import { baixarCsv } from "@/lib/relatorios";
 import {
   proximoStatus,
   reaisParaCentavos,
@@ -55,6 +57,20 @@ const ACAO: Partial<Record<StatusAtendimento, string>> = {
 };
 const campo = "lc-field";
 const rotulo = "lc-label";
+const NOMES_STATUS: Record<StatusAtendimento, string> = {
+  aguardando: "Aguardando",
+  em_lavagem: "Em lavagem",
+  pronto_para_retirada: "Pronto para retirada",
+  entregue: "Concluído",
+  cancelado: "Cancelado",
+};
+const NOMES_PAGAMENTO: Record<PagamentoEntrada["forma_pagamento"], string> = {
+  dinheiro: "Dinheiro",
+  pix: "PIX",
+  debito: "Débito",
+  credito: "Crédito",
+  outro: "Outro",
+};
 
 type Lavador = { perfil_id: string; nome: string; ordem_rateio: number };
 type Pagamento = {
@@ -116,6 +132,43 @@ export function FilaAtendimentos({ perfilId, papel }: { perfilId: string; papel:
   });
 
   const atualizar = () => qc.invalidateQueries({ queryKey: ["fila-atendimentos"] });
+  const baixarRelatorio = () => {
+    const itens = fila.data ?? [];
+    baixarCsv(
+      `atendimentos-${data}.csv`,
+      [
+        "Data e hora",
+        "Cliente",
+        "Veículo",
+        "Categoria",
+        "Serviço",
+        "Status",
+        "Valor final",
+        "Lavadores",
+        "Pagamentos",
+        "Observações",
+      ],
+      itens.map((item) => [
+        formatarDataHora(item.chegou_em),
+        item.nome_cliente_snapshot,
+        item.veiculo_snapshot,
+        item.categoria_veiculo_snapshot,
+        item.servico_snapshot,
+        NOMES_STATUS[item.status],
+        item.valor_final == null ? "Pendente" : formatarDinheiro(item.valor_final),
+        item.lavadores.map((lavador) => lavador.nome).join(", ") || "Não vinculados",
+        item.pagamentos.length
+          ? item.pagamentos
+              .map(
+                (pagamento) =>
+                  `${NOMES_PAGAMENTO[pagamento.forma_pagamento]}: ${formatarDinheiro(pagamento.valor)}`,
+              )
+              .join(" + ")
+          : "Pendente",
+        item.observacoes,
+      ]),
+    );
+  };
 
   return (
     <section className="lc-page">
@@ -125,18 +178,29 @@ export function FilaAtendimentos({ perfilId, papel }: { perfilId: string; papel:
           <h1 className="mt-2">Central de atendimentos</h1>
           <p>Acompanhe todos os atendimentos do dia, da chegada à conclusão.</p>
         </div>
-        {!abrirForm && (
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
           <Button
+            variant="outline"
             className="w-full sm:w-auto"
-            onClick={() => {
-              setData(hoje);
-              setAbrirForm(true);
-            }}
+            disabled={!fila.data?.length}
+            onClick={baixarRelatorio}
           >
-            <Plus aria-hidden="true" />
-            Novo atendimento
+            <Download aria-hidden="true" />
+            Baixar relatório
           </Button>
-        )}
+          {!abrirForm && (
+            <Button
+              className="w-full sm:w-auto"
+              onClick={() => {
+                setData(hoje);
+                setAbrirForm(true);
+              }}
+            >
+              <Plus aria-hidden="true" />
+              Novo atendimento
+            </Button>
+          )}
+        </div>
       </div>
       {abrirForm && (
         <NovoAtendimento
@@ -385,16 +449,7 @@ function CartaoAtendimento({
           <dd className="font-medium">
             {(item.pagamentos ?? []).length
               ? item.pagamentos
-                  .map(
-                    (pagamento) =>
-                      ({
-                        dinheiro: "Dinheiro",
-                        pix: "PIX",
-                        debito: "Débito",
-                        credito: "Crédito",
-                        outro: "Outro",
-                      })[pagamento.forma_pagamento],
-                  )
+                  .map((pagamento) => NOMES_PAGAMENTO[pagamento.forma_pagamento])
                   .join(" + ")
               : "Pendente"}
           </dd>
