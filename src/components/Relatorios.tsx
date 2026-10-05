@@ -222,8 +222,8 @@ export function Relatorios({ perfilId, papel }: { perfilId: string; papel: Papel
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <article className="lc-panel flex flex-col">
-          <span className="grid size-11 place-items-center rounded-xl bg-primary/10 text-primary">
+        <article className="lc-panel flex flex-col border-primary/10">
+          <span className="grid size-11 place-items-center rounded-xl bg-primary/10 text-primary shadow-sm">
             <ClipboardList aria-hidden="true" />
           </span>
           <h2 className="mt-4 text-lg font-semibold">Atendimentos</h2>
@@ -239,8 +239,8 @@ export function Relatorios({ perfilId, papel }: { perfilId: string; papel: Papel
           </Button>
         </article>
 
-        <article className="lc-panel flex flex-col">
-          <span className="grid size-11 place-items-center rounded-xl bg-primary/10 text-primary">
+        <article className="lc-panel flex flex-col border-primary/10">
+          <span className="grid size-11 place-items-center rounded-xl bg-primary/10 text-primary shadow-sm">
             <Wallet aria-hidden="true" />
           </span>
           <h2 className="mt-4 text-lg font-semibold">

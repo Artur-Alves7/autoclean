@@ -2,7 +2,7 @@ import { LogoAutoClean } from "@/components/LogoAutoClean";
 import { useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState, type ReactNode } from "react";
-import { LoaderCircle, LogOut, Menu, ShieldCheck, UserRound } from "lucide-react";
+import { ChevronDown, LoaderCircle, LogOut, Menu, ShieldCheck, UserRound } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 
@@ -32,13 +32,13 @@ export function AreaLayout({
   }
 
   return (
-    <div className="lc-workspace min-h-screen bg-background lg:grid lg:grid-cols-[248px_minmax(0,1fr)] 2xl:grid-cols-[272px_minmax(0,1fr)]">
+    <div className="lc-workspace min-h-dvh bg-background lg:grid lg:grid-cols-[264px_minmax(0,1fr)] 2xl:grid-cols-[288px_minmax(0,1fr)]">
       <a href="#conteudo-principal" className="lc-skip">
         Pular para o conteúdo
       </a>
-      <aside className="lc-sidebar sticky top-0 hidden h-dvh flex-col px-4 py-6 lg:flex">
+      <aside className="lc-sidebar sticky top-0 hidden h-dvh flex-col border-r border-sidebar-border px-4 py-6 lg:flex">
         <div className="mb-8 px-3">
-          <LogoAutoClean className="mb-4 aspect-square w-full rounded-xl object-contain" />
+          <LogoAutoClean className="mb-5 aspect-square w-full rounded-2xl object-contain shadow-2xl" />
           <p className="lc-brand text-white">Auto Clean</p>
           <p className="mt-1 text-xs text-sidebar-foreground/70">Gestão do lava jato</p>
         </div>
@@ -54,15 +54,15 @@ export function AreaLayout({
         </div>
       </aside>
       <div className="min-w-0 lg:grid lg:h-dvh lg:grid-rows-[auto_minmax(0,1fr)] lg:overflow-hidden">
-        <header className="sticky top-0 z-30 flex min-h-16 items-center justify-between gap-3 border-b bg-card px-4 sm:min-h-20 sm:px-7 lg:static lg:px-8 xl:px-10">
+        <header className="sticky top-0 z-30 flex min-h-16 items-center justify-between gap-2 border-b bg-card/95 px-3 backdrop-blur-md sm:min-h-20 sm:gap-3 sm:px-6 lg:static lg:px-8 xl:px-10">
           <div className="flex min-w-0 items-center gap-3">
-            <LogoAutoClean className="size-12 shrink-0 rounded-lg object-contain lg:hidden" />
-            <div>
+            <LogoAutoClean className="size-11 shrink-0 rounded-lg object-contain sm:size-12 lg:hidden" />
+            <div className="min-w-0">
               <p className="lc-eyebrow hidden lg:block">Auto Clean / Gestão</p>
-              <p className="text-sm font-semibold sm:text-base">{secao ?? titulo}</p>
+              <p className="truncate text-sm font-semibold sm:text-base">{secao ?? titulo}</p>
             </div>
           </div>
-          <div className="flex min-w-0 items-center gap-3">
+          <div className="flex shrink-0 items-center gap-2 sm:gap-3">
             <div className="hidden size-9 items-center justify-center rounded-full border bg-muted text-primary sm:flex">
               <UserRound className="size-4" aria-hidden="true" />
             </div>
@@ -70,7 +70,14 @@ export function AreaLayout({
               <p className="truncate text-sm font-semibold">{nome}</p>
               <p className="text-xs text-muted-foreground">{titulo}</p>
             </div>
-            <Button onClick={sair} disabled={saindo} aria-busy={saindo} variant="ghost" size="sm">
+            <Button
+              className="px-2.5 sm:px-3"
+              onClick={sair}
+              disabled={saindo}
+              aria-busy={saindo}
+              variant="ghost"
+              size="sm"
+            >
               {saindo ? (
                 <LoaderCircle className="animate-spin" aria-hidden="true" />
               ) : (
@@ -81,12 +88,18 @@ export function AreaLayout({
           </div>
         </header>
         <div className="min-w-0 lg:overflow-y-auto">
-          <div className="px-3 pt-3 sm:px-6 sm:pt-4 lg:hidden">
-            <details className="lc-sidebar lc-mobile-nav">
+          <div className="sticky top-16 z-20 px-3 pt-3 sm:top-20 sm:px-6 sm:pt-4 lg:hidden">
+            <details className="lc-sidebar lc-mobile-nav group">
               <summary>
                 <Menu className="size-4" aria-hidden="true" />
                 <span>Menu do sistema</span>
-                <span className="ml-auto text-xs text-sidebar-foreground/70">{secao}</span>
+                <span className="ml-auto max-w-28 truncate text-xs text-sidebar-foreground/70 sm:max-w-64">
+                  {secao}
+                </span>
+                <ChevronDown
+                  className="size-4 transition-transform group-open:rotate-180"
+                  aria-hidden="true"
+                />
               </summary>
               {navigation}
             </details>
@@ -94,7 +107,7 @@ export function AreaLayout({
           <main
             id="conteudo-principal"
             tabIndex={-1}
-            className="mx-auto w-full max-w-[1600px] p-3 pb-10 sm:p-6 lg:p-8 xl:p-10"
+            className="mx-auto w-full max-w-[1520px] p-3 pb-10 sm:p-6 lg:p-8 xl:p-10 2xl:py-12"
           >
             {children}
           </main>

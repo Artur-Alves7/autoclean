@@ -336,7 +336,7 @@ function CartaoAtendimento({
 }) {
   const ativo = STATUS_ATIVOS.includes(item.status);
   return (
-    <li className="p-4 sm:p-5">
+    <li className="group p-4 transition-colors hover:bg-muted/25 sm:p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex min-w-0 gap-3">
           <span className="flex size-10 shrink-0 items-center justify-center rounded-xl border bg-muted text-xs font-semibold tabular-nums text-muted-foreground">
@@ -359,7 +359,7 @@ function CartaoAtendimento({
           <StatusBadge status={item.status} />
         </div>
       </div>
-      <dl className="my-4 grid grid-cols-2 gap-x-4 gap-y-4 text-sm lg:grid-cols-5">
+      <dl className="my-4 grid grid-cols-1 gap-x-4 gap-y-4 text-sm min-[380px]:grid-cols-2 lg:grid-cols-5">
         <div>
           <dt className="mb-1 text-xs text-muted-foreground">Serviço</dt>
           <dd className="font-medium">{item.servico_snapshot}</dd>
@@ -404,7 +404,7 @@ function CartaoAtendimento({
         </div>
       </dl>
       {(ativo || papel === "administrador") && (
-        <div className="flex flex-wrap items-center gap-2 border-t border-dashed pt-3">
+        <div className="flex flex-col items-stretch gap-2 border-t border-dashed pt-3 min-[420px]:flex-row min-[420px]:flex-wrap min-[420px]:items-center">
           {ativo && (
             <>
               <Button
@@ -1633,6 +1633,8 @@ function AcaoAtendimento({
                 <img
                   src="/pix-lava-rapido.jpeg"
                   alt="QR Code PIX do Auto Clean"
+                  loading="lazy"
+                  decoding="async"
                   className="mx-auto mt-4 aspect-square w-full max-w-72 rounded-xl border bg-white object-contain p-2"
                 />
               </section>
