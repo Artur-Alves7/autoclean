@@ -284,7 +284,7 @@ describe("contrato HTTP da função de convite (Supabase simulado)", () => {
     const handler = readFileSync("supabase/functions/convidar-usuario/handler.ts", "utf8");
     const interfaceUsuarios = readFileSync("src/components/Usuarios.tsx", "utf8");
     const clientePublico = readFileSync("src/integrations/supabase/client.ts", "utf8");
-    const nomesNoEnv = readFileSync(".env", "utf8")
+    const nomesNoEnv = readFileSync(".env.example", "utf8")
       .split(/\r?\n/)
       .map((linha) => linha.split("=", 1)[0]?.trim())
       .filter(Boolean);
