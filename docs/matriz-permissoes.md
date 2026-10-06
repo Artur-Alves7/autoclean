@@ -24,5 +24,3 @@
 - A Edge Function de convite usa o JWT do administrador para autorizar e mantém `service_role` somente no ambiente do Supabase.
 - Valores são convertidos em centavos para divisão. O restante é distribuído pela `ordem_rateio`.
 - `placa_normalizada` é somente lida em pesquisas. Inserções/edições enviam `placa`, e o banco calcula a coluna gerada.
-
-O roteiro e as evidências da revisão da etapa 7 estão em [`validacao-seguranca-permissoes.md`](validacao-seguranca-permissoes.md).

@@ -1,63 +1,113 @@
 # Auto Clean
 
-Sistema operacional do lava-jato Auto Clean, integrado a Lovable, Supabase Cloud e GitHub. O front-end usa React 19 com TanStack Start/Query; autenticação, PostgreSQL, RLS, RPCs e Edge Functions ficam no Supabase.
+Sistema web para gestão operacional e financeira de um lava-jato real. O Auto Clean organiza a
+fila de veículos, clientes, serviços, pagamentos, repasses e fechamentos diários em uma única
+aplicação responsiva.
+
+## Identificação acadêmica
+
+- **Aluno:** Artur Alves
+- **Disciplina:** Banco de Dados
+- **Professor:** Anderson Soares Costa
+- **Modalidade:** trabalho individual
+
+## Problema e solução
+
+O controle manual de um lava-jato dificulta acompanhar a etapa de cada veículo, conferir
+pagamentos e dividir os valores entre empresa e lavadores. O Auto Clean oferece uma central de
+atendimentos por data, registra todo o fluxo até a entrega e executa o fechamento financeiro com
+regras consistentes no PostgreSQL.
 
 ## Funcionalidades
 
-- fila operacional pela view `vw_painel_atendimentos`;
-- cadastro transacional de cliente, veículo, atendimento e lavadores;
-- fluxo `aguardando` → `em_lavagem` → `pronto_para_retirada` → `entregue`, com cancelamento motivado;
-- preço pendente explícito e pagamentos divididos na saída;
-- clientes, veículos e histórico, sem exclusão física;
-- categorias, serviços e usuários administrados por perfil;
-- repasses exatos em centavos pela function `fn_calcular_repasse`;
-- fechamento pela procedure `sp_fechar_repasses_dia`, com ajustes auditados posteriores;
-- acesso separado para administrador e lavador, protegido por RLS e funções `SECURITY DEFINER` com `search_path` fixo.
+- login, recuperação de senha, convite e primeiro acesso;
+- áreas separadas para administrador e lavador;
+- fila por data com aguardando, em lavagem, pronto para retirada e concluído;
+- atendimento imediato, retroativo ou agendado;
+- clientes com múltiplos veículos e placa opcional;
+- valor pendente ou informado na chegada;
+- pagamento único ou dividido, com QR Code Pix na própria tela;
+- entrega condicionada à consistência entre valor final e pagamentos;
+- edição administrativa auditada em qualquer etapa;
+- repasses e fechamentos atuais ou retroativos;
+- reabertura auditada e ajustes posteriores sem apagar lançamentos confirmados;
+- relatórios de atendimentos e repasses por dia, período ou histórico.
 
-## Desenvolvimento local
+O levantamento completo está em
+[`docs/levantamento-requisitos.md`](docs/levantamento-requisitos.md).
 
-Requer Node.js 20+ e pnpm, npm ou Bun. Não versione `.env`.
+## Tecnologias
 
-```sh
-pnpm install
-pnpm dev
-pnpm test
-pnpm lint
-pnpm build
+- React 19 e TypeScript;
+- TanStack Start, Router e Query;
+- Vite e Tailwind CSS;
+- Supabase Auth, PostgreSQL, PostgREST e Edge Functions;
+- Row Level Security (RLS), View, Functions, RPCs e Procedure;
+- Vitest, Testing Library, ESLint e Prettier;
+- Lovable e GitHub para sincronização e publicação.
+
+## Organização
+
+```text
+├── src/                  código da aplicação e testes
+├── public/               logo, PWA e recursos públicos
+├── supabase/             migrations e Edge Functions operacionais
+├── database/             scripts SQL organizados para a atividade
+├── docs/                 requisitos, arquitetura, permissões e validações
+├── .env.example          modelo das variáveis públicas
+└── README.md             visão geral e execução
 ```
 
-O cliente espera as variáveis públicas já usadas pelo projeto (`VITE_SUPABASE_URL` e `VITE_SUPABASE_PUBLISHABLE_KEY`). A chave `service_role` nunca deve existir no navegador.
+## Banco de dados
 
-## Banco: aplicação manual
+O SGBD é PostgreSQL hospedado no Supabase Cloud. As principais tabelas são:
 
-O esquema inicial já existe no Supabase Cloud. Não reaplique migrations antigas nem recrie tabelas. Revise e aplique, nesta ordem, somente as migrations novas ainda ausentes no ambiente:
+- `clientes`, `veiculos`, `categorias_veiculo` e `servicos_lavagem`;
+- `perfis` e `papeis_perfil`;
+- `atendimentos`, `atendimento_lavadores` e `pagamentos`;
+- `historico_status`, `historico_alteracoes` e `historico_fechamentos`;
+- `fechamentos_diarios`, `itens_fechamento` e `ajustes_repasse_pendentes`.
 
-1. `supabase/migrations/20261002010000_operacao_segura_lavaclean.sql` — helpers seguros, correção versionada da recursão de RLS, view, function de rateio, RPCs transacionais e procedure de fechamento;
-2. `supabase/migrations/20261002011000_politicas_e_correcoes.sql` — políticas das tabelas usadas, administração de usuários e correção auditada;
-3. `supabase/migrations/20261002012000_ajustes_repasse.sql` — ajustes posteriores sem mutar lançamentos confirmados.
-4. `supabase/migrations/20261002013000_fechamento_diario_idempotente.sql` — fechamento idempotente por data, carregamento de pendências anteriores e consumo atômico de ajustes.
-5. `supabase/migrations/20261002014000_reforco_permissoes.sql` — escrita de participantes restrita às RPCs, correção administrativa somente em atendimentos ativos e validações estritas de pagamento na entrega.
+### View: `vw_painel_atendimentos`
 
-Antes de aplicar, faça backup e compare os objetos/políticas existentes no painel. Os arquivos usam `create or replace`, `create table if not exists` e políticas com nomes `lc_*`; não alteram nem apagam dados de negócio. A migration inicial do banco não está neste repositório, portanto o histórico versionado não prova sozinho o estado atual do ambiente Cloud.
+Consolida atendimento, cliente, veículo, serviço, participantes e pagamentos. É utilizada nas
+telas de Atendimentos, Clientes e veículos, Repasses e Relatórios.
 
-## Convite de usuários
+### Function: `fn_calcular_repasse`
 
-A função `supabase/functions/convidar-usuario` valida o JWT do chamador e confirma no banco que ele é administrador. Depois, usa a Admin API apenas no servidor para convidar o usuário e preparar perfil/papel.
+Recebe o UUID do atendimento e retorna a parte da empresa e dos lavadores em centavos. Quando a
+divisão não é exata, os centavos restantes seguem a ordem de rateio, mantendo o total correto.
 
-Configure no ambiente da Edge Function, nunca no front-end:
+### Procedure: `sp_fechar_repasses_dia`
+
+Recebe a data, o perfil administrativo, pendências, observações e o identificador do fechamento.
+Seleciona atendimentos elegíveis, valida pagamentos, chama a Function de rateio e grava os itens.
+A aplicação a executa indiretamente por `rpc_fechar_repasses_dia`, pois o cliente Supabase chama
+Functions PostgreSQL por RPC.
+
+Os scripts acadêmicos estão em [`database`](database/README.md). O fluxo técnico completo está
+em [`docs/arquitetura.md`](docs/arquitetura.md).
+
+## Edge Function de convite
+
+`supabase/functions/convidar-usuario` valida o JWT e confirma que o chamador é administrador.
+Somente então usa a Admin API no servidor. Os segredos abaixo pertencem ao ambiente da função:
 
 - `SUPABASE_URL`;
 - `SUPABASE_ANON_KEY`;
 - `SUPABASE_SERVICE_ROLE_KEY`.
 
-Faça o deploy da função somente depois das migrations e mantenha `verify_jwt = true`. Não há cadastro público.
+A função mantém `verify_jwt = true`. Não existe cadastro público.
 
-## Segurança e operação
+## Segurança
 
-A matriz detalhada está em [`docs/matriz-permissoes.md`](docs/matriz-permissoes.md). Atendimentos ativos são visíveis aos operadores; depois de entregues/cancelados, o lavador consulta apenas os atendimentos em que participou. Operações administrativas também são validadas no banco.
+- autenticação pelo Supabase Auth;
+- RLS nas tabelas do domínio;
+- RPCs com validação de papel e consistência;
+- `search_path` fixo nas rotinas privilegiadas;
+- fechamentos confirmados imutáveis fora da reabertura auditada;
+- chave administrativa restrita à Edge Function;
+- `.env`, builds e arquivos temporários ignorados pelo Git.
 
-Fechamentos confirmados e seus lançamentos não podem ser editados/excluídos. Uma correção posterior gera histórico e diferenças pendentes vinculadas ao lançamento original; o fechamento seguinte consome essas diferenças como `ajuste`.
-
-## Sincronização com Lovable
-
-Faça commit dos arquivos, envie ao repositório GitHub conectado e só então sincronize/abra no Lovable. As migrations e Edge Function precisam de aplicação/deploy manual no Supabase; um push no GitHub não altera o banco por si só.
+Consulte [`docs/matriz-permissoes.md`](docs/matriz-permissoes.md) para a separação entre
+administrador e lavador.
