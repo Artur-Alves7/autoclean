@@ -16,6 +16,11 @@ dist-ssr
 .nitro
 *.local
 
+# Configuração local: versione somente o modelo sem valores reais
+.env
+.env.*
+!.env.example
+
 # Wrangler / Cloudflare
 .wrangler/
 .dev.vars
