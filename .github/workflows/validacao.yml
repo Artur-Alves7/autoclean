@@ -1,0 +1,40 @@
+name: Validação do projeto
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  validar:
+    name: Lint, testes e build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Baixar o código
+        uses: actions/checkout@v4
+
+      - name: Preparar o Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Instalar dependências
+        run: bun install --frozen-lockfile
+
+      - name: Executar lint
+        run: bun run lint
+
+      - name: Verificar TypeScript
+        run: bun x tsc --noEmit
+
+      - name: Executar testes
+        run: bun run test
+
+      - name: Gerar build
+        run: bun run build
