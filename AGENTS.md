@@ -8,3 +8,6 @@
 > Commits you push to the connected branch sync back to Lovable and show up in
 > the editor, so keep the branch in a working state.
 <!-- LOVABLE:END -->
+
+## Decisões técnicas
+- Public Supabase URL/publishable key have fallbacks in vite.config.ts `define`, because `.env` is gitignored and the publish build would otherwise ship without them; never put service-role keys there.
