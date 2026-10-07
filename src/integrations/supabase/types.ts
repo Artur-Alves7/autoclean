@@ -957,20 +957,6 @@ export type Database = {
         }
         Returns: undefined
       }
-      rpc_reabrir_fechamento_dia: {
-        Args: {
-          p_data_operacao: string
-          p_motivo: string
-        }
-        Returns: string
-      }
-      rpc_listar_ajustes_fechamento: {
-        Args: { p_data_operacao: string }
-        Returns: {
-          id: string
-          valor: number
-        }[]
-      }
       rpc_corrigir_atendimento_entregue: {
         Args: {
           p_atendimento_id: string
@@ -1021,6 +1007,28 @@ export type Database = {
         }
         Returns: string
       }
+      rpc_listar_ajustes_fechamento: {
+        Args: { p_data_operacao: string }
+        Returns: {
+          atendimento_id: string
+          criado_em: string
+          criado_por_perfil_id: string
+          fechamento_destino_id: string | null
+          id: string
+          item_origem_id: string | null
+          motivo: string
+          perfil_destinatario_id: string | null
+          processado_em: string | null
+          tipo_destinatario: Database["public"]["Enums"]["tipo_destinatario"]
+          valor: number
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "ajustes_repasse_pendentes"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       rpc_listar_atendimentos_fechamento: {
         Args: { p_data_operacao: string }
         Returns: {
@@ -1053,6 +1061,10 @@ export type Database = {
           isOneToOne: false
           isSetofReturn: true
         }
+      }
+      rpc_reabrir_fechamento_dia: {
+        Args: { p_data_operacao: string; p_motivo: string }
+        Returns: string
       }
       usuario_tem_papel: {
         Args: { p_papel: Database["public"]["Enums"]["papel_usuario"] }
