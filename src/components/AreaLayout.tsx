@@ -36,7 +36,7 @@ export function AreaLayout({
       <a href="#conteudo-principal" className="lc-skip">
         Pular para o conteúdo
       </a>
-      <aside className="lc-sidebar sticky top-0 hidden h-dvh flex-col border-r border-sidebar-border px-4 py-6 lg:flex">
+      <aside className="lc-sidebar sticky top-0 hidden h-dvh flex-col overflow-y-auto overscroll-contain border-r border-sidebar-border px-4 py-6 lg:flex">
         <div className="mb-8 px-3">
           <LogoAutoClean className="mb-5 aspect-square w-full rounded-2xl object-contain shadow-2xl" />
           <p className="lc-brand text-white">Auto Clean</p>
