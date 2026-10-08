@@ -287,6 +287,13 @@ A validação contempla:
 
 Essa rotina ajuda a impedir que alterações com erros conhecidos sejam incorporadas à branch principal.
 
+## 🎥 Vídeo explicativo
+
+A apresentação acadêmica demonstra as principais telas do Auto Clean e a integração da aplicação
+com a View, a Function e a Procedure implementadas no PostgreSQL.
+
+▶️ [Assistir ao vídeo de apresentação](docs/video/apresentacao-auto-clean.mp4)
+
 ## 📚 Documentação
 
 | Documento | Conteúdo |
