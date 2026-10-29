@@ -2,3 +2,6 @@ project_id = "jkhfhyrwkwzpoteenkyh"
 
 [functions.convidar-usuario]
 verify_jwt = true
+
+[functions.resumo-operacao-cache]
+verify_jwt = true

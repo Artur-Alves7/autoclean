@@ -11,6 +11,7 @@ Aplicação web responsiva para organizar atendimentos, clientes, veículos, pag
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-0B5FFF?style=flat-square&logo=typescript&logoColor=white)
 ![Supabase](https://img.shields.io/badge/Supabase-Cloud-075985?style=flat-square&logo=supabase&logoColor=white)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-RLS-0F2747?style=flat-square&logo=postgresql&logoColor=white)
+![Redis](https://img.shields.io/badge/Redis-Cache--aside-DC382D?style=flat-square&logo=redis&logoColor=white)
 ![Vitest](https://img.shields.io/badge/Testes-Vitest-06B6D4?style=flat-square&logo=vitest&logoColor=white)
 
 </div>
@@ -30,7 +31,7 @@ A solução reúne em um único ambiente:
 - relatórios por dia, período ou histórico completo;
 - separação de acesso entre administrador e lavador.
 
-Além do uso operacional, o projeto demonstra a aplicação de **View, Functions, Procedure, RPCs, autenticação e políticas RLS** em PostgreSQL com Supabase.
+A solução utiliza **View, Functions, Procedure, RPCs, autenticação, políticas RLS e cache Redis** para manter o fluxo operacional consistente e seguro.
 
 ## 🎯 Problema e solução
 
@@ -99,14 +100,23 @@ O Auto Clean resolve esse cenário por meio de uma central de atendimentos por d
 - seleção por dia, intervalo de datas ou histórico completo;
 - exportação respeitando as permissões do usuário.
 
+### Resumo diário em cache
+
+- resumo financeiro diário para administradores na tela de Relatórios;
+- Redis usado de forma funcional para reduzir consultas repetidas ao banco;
+- cache-aside com validade de 60 segundos;
+- indicação visível da origem do resultado: Redis ou Supabase;
+- atualização manual para renovar os dados quando necessário;
+- fallback seguro para Supabase caso o Redis esteja indisponível.
+
 O detalhamento funcional e os critérios de aceite estão no [levantamento de requisitos](docs/levantamento-requisitos.md).
 
 ## 👥 Perfis de usuário
 
-| Perfil | Responsabilidades principais |
-| --- | --- |
+| Perfil            | Responsabilidades principais                                                                  |
+| ----------------- | --------------------------------------------------------------------------------------------- |
 | **Administrador** | Gerencia usuários, configurações, atendimentos, pagamentos, relatórios, fechamentos e ajustes |
-| **Lavador** | Consulta e participa do fluxo dos atendimentos conforme suas permissões |
+| **Lavador**       | Consulta e participa do fluxo dos atendimentos conforme suas permissões                       |
 
 A separação completa de acesso está documentada na [matriz de permissões](docs/matriz-permissoes.md).
 
@@ -132,20 +142,24 @@ flowchart TD
     UI[React e TanStack Start] --> AUTH[Supabase Auth]
     UI --> API[Supabase JS e PostgREST]
     UI --> EDGE[Edge Function de convite]
+    UI --> RESUMO[Edge Function de resumo]
     API --> DB[(PostgreSQL)]
     EDGE --> AUTH
+    RESUMO --> REDIS[(Upstash Redis)]
+    RESUMO --> DB
     DB --> RLS[Políticas RLS]
     DB --> OBJ[View, Functions, RPCs e Procedure]
 ```
 
-| Camada | Responsabilidade |
-| --- | --- |
-| **Interface** | Telas responsivas, formulários, validações e experiência do usuário |
-| **Aplicação** | Consultas, cache e coordenação dos fluxos |
-| **Autenticação** | Sessão, convite, recuperação de senha e identificação do perfil |
-| **Banco de dados** | Integridade, permissões, cálculos, auditoria e persistência |
-| **Edge Function** | Convite administrativo executado somente no ambiente seguro |
-| **Integração contínua** | Lint, testes e build executados pelo GitHub Actions |
+| Camada                  | Responsabilidade                                                                        |
+| ----------------------- | --------------------------------------------------------------------------------------- |
+| **Interface**           | Telas responsivas, formulários, validações e experiência do usuário                     |
+| **Aplicação**           | Consultas, cache e coordenação dos fluxos                                               |
+| **Autenticação**        | Sessão, convite, recuperação de senha e identificação do perfil                         |
+| **Banco de dados**      | Integridade, permissões, cálculos, auditoria e persistência                             |
+| **Edge Functions**      | Convite administrativo e resumo diário com cache, executados somente no ambiente seguro |
+| **Redis**               | Cache temporário do resumo financeiro diário, sem dados pessoais                        |
+| **Integração contínua** | Lint, testes e build executados pelo GitHub Actions                                     |
 
 O fluxo técnico completo está em [Arquitetura do Auto Clean](docs/arquitetura.md).
 
@@ -155,14 +169,14 @@ O sistema utiliza **PostgreSQL hospedado no Supabase Cloud**.
 
 ### Principais entidades
 
-| Domínio | Tabelas |
-| --- | --- |
-| Pessoas e acesso | `perfis`, `papeis_perfil` |
-| Clientes e veículos | `clientes`, `veiculos`, `categorias_veiculo` |
-| Catálogo | `servicos_lavagem` |
-| Operação | `atendimentos`, `atendimento_lavadores`, `pagamentos` |
-| Auditoria | `historico_status`, `historico_alteracoes`, `historico_fechamentos` |
-| Financeiro | `fechamentos_diarios`, `itens_fechamento`, `ajustes_repasse_pendentes` |
+| Domínio             | Tabelas                                                                |
+| ------------------- | ---------------------------------------------------------------------- |
+| Pessoas e acesso    | `perfis`, `papeis_perfil`                                              |
+| Clientes e veículos | `clientes`, `veiculos`, `categorias_veiculo`                           |
+| Catálogo            | `servicos_lavagem`                                                     |
+| Operação            | `atendimentos`, `atendimento_lavadores`, `pagamentos`                  |
+| Auditoria           | `historico_status`, `historico_alteracoes`, `historico_fechamentos`    |
+| Financeiro          | `fechamentos_diarios`, `itens_fechamento`, `ajustes_repasse_pendentes` |
 
 ### View — `vw_painel_atendimentos`
 
@@ -196,7 +210,7 @@ A Procedure:
 A aplicação executa essa Procedure indiretamente por `rpc_fechar_repasses_dia`, pois o cliente do Supabase acessa rotinas PostgreSQL por RPC.
 
 > [!IMPORTANT]
-> Os scripts da pasta [`database`](database/README.md) são materiais acadêmicos e de reconstrução local. O histórico operacional oficial permanece em `supabase/migrations`. Os scripts acadêmicos não devem ser aplicados diretamente na produção.
+> O histórico operacional do banco permanece em `supabase/migrations`. A pasta [`database`](database/README.md) reúne referências estruturadas dos principais objetos e não deve ser aplicada diretamente em produção.
 
 ## 🔐 Segurança
 
@@ -234,17 +248,26 @@ As variáveis abaixo pertencem ao ambiente seguro da função:
 
 A `SUPABASE_SERVICE_ROLE_KEY` nunca deve ser enviada ao frontend ou registrada no GitHub.
 
+### Cache Redis do resumo diário
+
+A função `supabase/functions/resumo-operacao-cache` atende exclusivamente administradores autenticados. Ela aplica o padrão **cache-aside**: primeiro procura o resumo no Redis; quando não o encontra, consulta a View `vw_painel_atendimentos`, monta os totais e salva a resposta por 60 segundos.
+
+O Redis foi escolhido para reduzir leituras repetidas de um resumo consultado com frequência nos relatórios, mantendo o Supabase como fonte definitiva dos dados. A resposta em cache contém somente data, quantidades, totais em centavos e metadados técnicos; não armazena nomes de clientes, veículos ou pagamentos individuais.
+
+Os Secrets `UPSTASH_REDIS_REST_URL` e `UPSTASH_REDIS_REST_TOKEN` devem ser configurados somente no ambiente da Edge Function. Eles nunca usam o prefixo `VITE_` e não devem ser incluídos em commits. Consulte a [documentação da integração Redis](docs/integracao-redis.md) para detalhes de arquitetura e configuração.
+
 ## 🛠️ Tecnologias
 
-| Categoria | Tecnologias |
-| --- | --- |
-| Frontend | React 19, TypeScript, TanStack Start, Router e Query |
-| Interface | Tailwind CSS, Radix UI e Lucide Icons |
-| Backend e dados | Supabase Auth, PostgreSQL, PostgREST e Edge Functions |
-| Validação | Zod, constraints, RLS e rotinas PostgreSQL |
-| Qualidade | Vitest, Testing Library, ESLint e Prettier |
-| Desenvolvimento | Vite e Bun |
-| Versionamento | Git, GitHub e integração com Lovable |
+| Categoria       | Tecnologias                                                     |
+| --------------- | --------------------------------------------------------------- |
+| Frontend        | React 19, TypeScript, TanStack Start, Router e Query            |
+| Interface       | Tailwind CSS, Radix UI e Lucide Icons                           |
+| Backend e dados | Supabase Auth, PostgreSQL, PostgREST e Edge Functions           |
+| Cache           | Upstash Redis via REST, aplicado ao resumo diário de relatórios |
+| Validação       | Zod, constraints, RLS e rotinas PostgreSQL                      |
+| Qualidade       | Vitest, Testing Library, ESLint e Prettier                      |
+| Desenvolvimento | Vite e Bun                                                      |
+| Versionamento   | Git, GitHub e integração com Lovable                            |
 
 ## 📁 Organização do repositório
 
@@ -252,13 +275,13 @@ A `SUPABASE_SERVICE_ROLE_KEY` nunca deve ser enviada ao frontend ou registrada n
 .
 ├── .github/workflows/    validação automática no GitHub
 ├── .lovable/             integração com o Lovable
-├── database/             scripts SQL organizados para a atividade
+├── database/             referências estruturadas dos objetos SQL
 ├── docs/                 requisitos, arquitetura e permissões
 ├── public/               logo, ícones, PWA e recursos públicos
 ├── src/                  aplicação, componentes, rotas e testes
 ├── supabase/             migrations, configuração e Edge Functions
 ├── .env.example          modelo das variáveis públicas
-└── README.md             apresentação geral do projeto
+└── README.md             visão geral, arquitetura e operação do produto
 ```
 
 ### Responsabilidade das pastas
@@ -270,7 +293,7 @@ A `SUPABASE_SERVICE_ROLE_KEY` nunca deve ser enviada ao frontend ou registrada n
 - `src/integrations/supabase`: cliente e tipos do Supabase;
 - `supabase/functions`: funções executadas no ambiente do Supabase;
 - `supabase/migrations`: evolução oficial do banco;
-- `database`: organização acadêmica dos objetos SQL;
+- `database`: referências organizadas de tabelas, Views, Functions e Procedures;
 - `docs`: documentação técnica e levantamento de requisitos.
 
 ## ✅ Qualidade e validação
@@ -287,29 +310,15 @@ A validação contempla:
 
 Essa rotina ajuda a impedir que alterações com erros conhecidos sejam incorporadas à branch principal.
 
-## 🎥 Vídeo explicativo
-
-A apresentação acadêmica demonstra as principais telas do Auto Clean e a integração da aplicação
-com a View, a Function e a Procedure implementadas no PostgreSQL.
-
-▶️ [Assistir ao vídeo de apresentação](docs/video/apresentacao-auto-clean.mp4)
-
 ## 📚 Documentação
 
-| Documento | Conteúdo |
-| --- | --- |
+| Documento                                                     | Conteúdo                                                  |
+| ------------------------------------------------------------- | --------------------------------------------------------- |
 | [Levantamento de requisitos](docs/levantamento-requisitos.md) | Requisitos funcionais, não funcionais e regras de negócio |
-| [Arquitetura](docs/arquitetura.md) | Camadas, integrações, fluxos e decisões de integridade |
-| [Matriz de permissões](docs/matriz-permissoes.md) | Acessos permitidos para administrador e lavador |
-| [Scripts acadêmicos](database/README.md) | Tabelas, View, Functions e Procedure da atividade |
-
-## 🎓 Identificação acadêmica
-
-| Campo | Informação |
-| --- | --- |
-| **Aluno** | Artur Alves de Sousa |
-| **Disciplina** | Banco de Dados |
-| **Professor** | Anderson Soares Costa |
+| [Arquitetura](docs/arquitetura.md)                            | Camadas, integrações, fluxos e decisões de integridade    |
+| [Matriz de permissões](docs/matriz-permissoes.md)             | Acessos permitidos para administrador e lavador           |
+| [Referência do banco](database/README.md)                     | Tabelas, View, Functions e Procedure do sistema           |
+| [Integração Redis](docs/integracao-redis.md)                  | Cache-aside, segurança e configuração operacional         |
 
 ---
 
