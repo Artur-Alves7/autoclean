@@ -2,6 +2,7 @@ import { ClipboardList, Download, FileSpreadsheet, Wallet } from "lucide-react";
 import { useState } from "react";
 
 import { DialogoRelatorio } from "@/components/DialogoRelatorio";
+import { ResumoOperacaoCache } from "@/components/ResumoOperacaoCache";
 import { Button } from "@/components/ui/button";
 import type { Papel } from "@/lib/acesso";
 import { dataLocalIso } from "@/lib/fechamento";
@@ -220,6 +221,8 @@ export function Relatorios({ perfilId, papel }: { perfilId: string; papel: Papel
           <p>Escolha o tipo e o período para baixar os dados em formato CSV.</p>
         </div>
       </div>
+
+      {papel === "administrador" ? <ResumoOperacaoCache /> : null}
 
       <div className="grid gap-4 lg:grid-cols-2">
         <article className="lc-panel flex flex-col border-primary/10">
